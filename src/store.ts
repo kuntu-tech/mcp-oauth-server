@@ -1,20 +1,124 @@
 import crypto from "crypto";
 import { randomUUID } from "crypto";
-import db from "./db";
-import { CONFIG, SUPPORTED_SCOPES } from "./config";
+import supabase from "./db";
+import { CONFIG } from "./config";
+
+const DEFAULT_SCOPE_FALLBACK = ["openid", "profile", "email"];
+
+type Nullable<T> = T | null | undefined;
+
+type AppRow = {
+  id: string;
+  name: string;
+  config?: string | null;
+  status?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+type AppUserRow = {
+  id: string;
+  email?: string | null;
+  password_hash?: string | null;
+  name?: string | null;
+  avatar_url?: string | null;
+  auth_provider?: string | null;
+  provider_user_id?: string | null;
+  firebase_uid?: string | null;
+  app_id?: string | null;
+  last_login_at?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+type AuthorizationCodeRow = {
+  code: string;
+  user_uuid: string;
+  client_id: string;
+  redirect_uri: string;
+  scope: string;
+  code_challenge: string;
+  code_challenge_method: "S256";
+  resource: string;
+  expires_at: number;
+  consumed: number;
+};
+
+type TokenRow = {
+  token: string;
+  user_uuid: string;
+  client_id: string;
+  scope: string;
+  resource: string;
+  expires_at: number;
+};
+
+type AppConfigClient = {
+  client_id?: string;
+  client_secret?: string | null;
+  client_name?: string | null;
+  application_type?: string | null;
+  redirect_uris?: Nullable<string[] | string>;
+  grant_types?: Nullable<string[] | string>;
+  scope?: string | null;
+  token_endpoint_auth_method?: string | null;
+  registration_access_token?: string | null;
+  registration_client_uri?: string | null;
+  client_id_issued_at?: number | null;
+  client_secret_expires_at?: number | null;
+  resource_uri?: string | null;
+  resource?: string | null;
+  default_scopes?: Nullable<string[] | string>;
+};
+
+type AppConfig = {
+  resource_uri?: string | null;
+  resourceUri?: string | null;
+  resource?: string | null;
+  default_scopes?: Nullable<string[] | string>;
+  oauth?: {
+    client_id?: string;
+    client_secret?: string;
+    client_name?: string;
+    application_type?: string;
+    redirect_uris?: Nullable<string[] | string>;
+    grant_types?: Nullable<string[] | string>;
+    scope?: string;
+    token_endpoint_auth_method?: string;
+    registration_access_token?: string;
+    registration_client_uri?: string;
+    client_id_issued_at?: number;
+    client_secret_expires_at?: number;
+    resource_uri?: string;
+    resource?: string;
+    default_scopes?: Nullable<string[] | string>;
+    clients?: AppConfigClient[];
+    client?: AppConfigClient;
+  };
+  clients?: AppConfigClient[];
+  authorization_codes?: AppAuthorizationCodeRecord[];
+  [key: string]: unknown;
+};
 
 export interface User {
   uuid: string;
   email: string;
-  password_hash: string;
+  password_hash?: string | null;
   display_name?: string | null;
+  app_id?: string | null;
+  auth_provider?: string | null;
+  firebase_uid?: string | null;
+  provider_user_id?: string | null;
 }
 
 export interface App {
+  id: string;
   uuid: string;
   name: string;
   resource_uri: string;
   default_scopes: string;
+  status?: string | null;
+  config: AppConfig;
 }
 
 export interface Client {
@@ -33,197 +137,6 @@ export interface Client {
   client_secret_expires_at: number;
 }
 
-const userRowToUser = (row: any): User | undefined =>
-  row
-    ? {
-        uuid: row.uuid,
-        email: row.email,
-        password_hash: row.password_hash,
-        display_name: row.display_name,
-      }
-    : undefined;
-
-export const findUserByEmail = (email: string): User | undefined => {
-  const stmt = db.prepare("SELECT * FROM users WHERE email = ?");
-  return userRowToUser(stmt.get(email));
-};
-
-export const findUserByUuid = (uuid: string): User | undefined => {
-  const stmt = db.prepare("SELECT * FROM users WHERE uuid = ?");
-  return userRowToUser(stmt.get(uuid));
-};
-
-export const createUser = (
-  email: string,
-  passwordHash: string,
-  displayName?: string
-): User => {
-  const uuid = randomUUID();
-  const insert = db.prepare(
-    "INSERT INTO users (uuid, email, password_hash, display_name) VALUES (?, ?, ?, ?)"
-  );
-  insert.run(uuid, email, passwordHash, displayName ?? null);
-  return {
-    uuid,
-    email,
-    password_hash: passwordHash,
-    display_name: displayName,
-  };
-};
-
-const appRowToApp = (row: any): App | undefined =>
-  row
-    ? {
-        uuid: row.uuid,
-        name: row.name,
-        resource_uri: row.resource_uri,
-        default_scopes: row.default_scopes,
-      }
-    : undefined;
-
-export const findAppByResource = (resourceUri: string): App | undefined => {
-  const stmt = db.prepare("SELECT * FROM apps WHERE resource_uri = ?");
-  return appRowToApp(stmt.get(resourceUri));
-};
-
-export const findAppByUuid = (uuid: string): App | undefined => {
-  const stmt = db.prepare("SELECT * FROM apps WHERE uuid = ?");
-  return appRowToApp(stmt.get(uuid));
-};
-
-export const ensureDefaultApp = (): App => {
-  const existing = findAppByResource(CONFIG.resourceServerUrl);
-  if (existing) {
-    return existing;
-  }
-  const uuid = randomUUID();
-  const insert = db.prepare(
-    "INSERT INTO apps (uuid, name, resource_uri, default_scopes) VALUES (?, ?, ?, ?)"
-  );
-  insert.run(
-    uuid,
-    "Primary OpenAI Apps Connector",
-    CONFIG.resourceServerUrl,
-    CONFIG.defaultScopes
-  );
-  return {
-    uuid,
-    name: "Primary OpenAI Apps Connector",
-    resource_uri: CONFIG.resourceServerUrl,
-    default_scopes: CONFIG.defaultScopes,
-  };
-};
-
-const clientRowToClient = (row: any): Client | undefined =>
-  row
-    ? {
-        client_id: row.client_id,
-        client_secret: row.client_secret,
-        client_name: row.client_name,
-        token_endpoint_auth_method: row.token_endpoint_auth_method,
-        application_type: row.application_type,
-        redirect_uris: JSON.parse(row.redirect_uris ?? "[]"),
-        grant_types: JSON.parse(row.grant_types ?? "[]"),
-        scope: row.scope,
-        app_uuid: row.app_uuid,
-        registration_access_token: row.registration_access_token,
-        registration_client_uri: row.registration_client_uri,
-        client_id_issued_at: row.client_id_issued_at,
-        client_secret_expires_at: row.client_secret_expires_at,
-      }
-    : undefined;
-
-export const findClientById = (clientId: string): Client | undefined => {
-  const stmt = db.prepare("SELECT * FROM clients WHERE client_id = ?");
-  return clientRowToClient(stmt.get(clientId));
-};
-
-export const findClientByRegistrationAccessToken = (
-  token: string
-): Client | undefined => {
-  const stmt = db.prepare(
-    "SELECT * FROM clients WHERE registration_access_token = ?"
-  );
-  return clientRowToClient(stmt.get(token));
-};
-
-export const createClient = (
-  client: Omit<Client, "client_id" | "client_id_issued_at" | "client_secret_expires_at">
-): Client => {
-  const clientId = randomUUID();
-  const clientSecret =
-    client.token_endpoint_auth_method === "none"
-      ? null
-      : client.client_secret || crypto.randomBytes(32).toString("hex");
-  const issuedAt = Math.floor(Date.now() / 1000);
-  const secretExpiresAt =
-    client.token_endpoint_auth_method === "none"
-      ? 0
-      : issuedAt + CONFIG.refreshTokenTtlSeconds;
-  const registrationAccessToken =
-    client.registration_access_token ?? crypto.randomBytes(32).toString("hex");
-  const registrationClientUri =
-    client.registration_client_uri ??
-    `${CONFIG.issuer}/oauth/client/${clientId}`;
-
-  const insert = db.prepare(
-    `INSERT INTO clients (
-      client_id,
-      client_secret,
-      client_name,
-      token_endpoint_auth_method,
-      application_type,
-      redirect_uris,
-      grant_types,
-      scope,
-      app_uuid,
-      registration_access_token,
-      registration_client_uri,
-      client_id_issued_at,
-      client_secret_expires_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  );
-
-  insert.run(
-    clientId,
-    clientSecret,
-    client.client_name ?? null,
-    client.token_endpoint_auth_method,
-    client.application_type,
-    JSON.stringify(client.redirect_uris),
-    JSON.stringify(client.grant_types),
-    client.scope ?? null,
-    client.app_uuid,
-    registrationAccessToken,
-    registrationClientUri,
-    issuedAt,
-    secretExpiresAt
-  );
-
-  return {
-    client_id: clientId,
-    client_secret: clientSecret ?? undefined,
-    client_name: client.client_name,
-    token_endpoint_auth_method: client.token_endpoint_auth_method,
-    application_type: client.application_type,
-    redirect_uris: client.redirect_uris,
-    grant_types: client.grant_types,
-    scope: client.scope,
-    app_uuid: client.app_uuid,
-    registration_access_token: registrationAccessToken,
-    registration_client_uri: registrationClientUri,
-    client_id_issued_at: issuedAt,
-    client_secret_expires_at: secretExpiresAt,
-  };
-};
-
-export const updateClientScopes = (clientId: string, scope: string) => {
-  const stmt = db.prepare(
-    "UPDATE clients SET scope = ?, updated_at = datetime('now') WHERE client_id = ?"
-  );
-  stmt.run(scope, clientId);
-};
-
 export interface AuthorizationCode {
   code: string;
   user_uuid: string;
@@ -237,57 +150,17 @@ export interface AuthorizationCode {
   consumed: number;
 }
 
-const codeRowToCode = (row: any): AuthorizationCode | undefined =>
-  row
-    ? {
-        code: row.code,
-        user_uuid: row.user_uuid,
-        client_id: row.client_id,
-        redirect_uri: row.redirect_uri,
-        scope: row.scope,
-        code_challenge: row.code_challenge,
-        code_challenge_method: row.code_challenge_method,
-        resource: row.resource,
-        expires_at: row.expires_at,
-        consumed: row.consumed,
-      }
-    : undefined;
-
-export const persistAuthorizationCode = (code: AuthorizationCode) => {
-  const insert = db.prepare(
-    `INSERT INTO authorization_codes
-    (code, user_uuid, client_id, redirect_uri, scope, code_challenge, code_challenge_method, resource, expires_at, consumed)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  );
-  insert.run(
-    code.code,
-    code.user_uuid,
-    code.client_id,
-    code.redirect_uri,
-    code.scope,
-    code.code_challenge,
-    code.code_challenge_method,
-    code.resource,
-    code.expires_at,
-    code.consumed
-  );
-};
-
-export const consumeAuthorizationCode = (
-  codeValue: string
-): AuthorizationCode | undefined => {
-  const stmt = db.prepare(
-    "SELECT * FROM authorization_codes WHERE code = ? AND consumed = 0"
-  );
-  const record = stmt.get(codeValue);
-  if (!record) {
-    return undefined;
-  }
-  const deleteStmt = db.prepare(
-    "UPDATE authorization_codes SET consumed = 1 WHERE code = ?"
-  );
-  deleteStmt.run(codeValue);
-  return codeRowToCode(record);
+type AppAuthorizationCodeRecord = {
+  code: string;
+  user_uuid: string;
+  client_id: string;
+  redirect_uri: string;
+  scope: string;
+  code_challenge: string;
+  code_challenge_method: string;
+  resource: string;
+  expires_at: number;
+  consumed: number;
 };
 
 export interface StoredToken {
@@ -299,56 +172,703 @@ export interface StoredToken {
   expires_at: number;
 }
 
-export const storeAccessToken = (token: StoredToken) => {
-  const insert = db.prepare(
-    `INSERT INTO access_tokens (token, user_uuid, client_id, scope, resource, expires_at)
-     VALUES (?, ?, ?, ?, ?, ?)`
-  );
-  insert.run(
-    token.token,
-    token.user_uuid,
-    token.client_id,
-    token.scope,
-    token.resource,
-    token.expires_at
-  );
+const normalizeScopeInput = (value: unknown): string[] => {
+  if (!value) {
+    return [];
+  }
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => String(item).trim())
+      .filter(Boolean);
+  }
+  if (typeof value === "string") {
+    return value
+      .split(/[\s,]+/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+  return [];
 };
 
-export const storeRefreshToken = (token: StoredToken) => {
-  const insert = db.prepare(
-    `INSERT INTO refresh_tokens (token, user_uuid, client_id, scope, resource, expires_at)
-     VALUES (?, ?, ?, ?, ?, ?)`
-  );
-  insert.run(
-    token.token,
-    token.user_uuid,
-    token.client_id,
-    token.scope,
-    token.resource,
-    token.expires_at
-  );
+const parseAppConfig = (config?: string | null): AppConfig => {
+  if (!config) {
+    return {};
+  }
+  try {
+    const parsed = JSON.parse(config) as AppConfig;
+    return typeof parsed === "object" && parsed !== null ? parsed : {};
+  } catch (error) {
+    console.warn("Failed to parse app config JSON", error);
+    return {};
+  }
 };
 
-export const findRefreshToken = (token: string): StoredToken | undefined => {
-  const stmt = db.prepare("SELECT * FROM refresh_tokens WHERE token = ?");
-  const row = stmt.get(token);
-  return row
+const serializeAppConfig = (config: AppConfig): string =>
+  JSON.stringify(config, null, 2);
+
+const resourceFromConfig = (config: AppConfig): string | undefined => {
+  return (
+    config.resource_uri ??
+    config.resourceUri ??
+    config.resource ??
+    config.oauth?.resource_uri ??
+    config.oauth?.resource ??
+    config.oauth?.client?.resource_uri ??
+    config.oauth?.client?.resource
+  )?.trim();
+};
+
+const defaultScopesFromConfig = (config: AppConfig): string[] => {
+  const scopes =
+    normalizeScopeInput(config.default_scopes) ||
+    normalizeScopeInput(config.oauth?.default_scopes) ||
+    normalizeScopeInput(config.oauth?.client?.default_scopes);
+  if (scopes.length > 0) {
+    return scopes;
+  }
+  const scopeString =
+    config.oauth?.scope ?? config.oauth?.client?.scope ?? undefined;
+  const normalized = normalizeScopeInput(scopeString);
+  return normalized.length > 0 ? normalized : [];
+};
+
+const coerceStringArray = (value: Nullable<string[] | string>): string[] => {
+  if (!value) {
+    return [];
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item));
+  }
+  const trimmed = String(value).trim();
+  if (!trimmed) {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (Array.isArray(parsed)) {
+      return parsed.map((item) => String(item));
+    }
+  } catch {
+    // fall back to comma/space separated
+  }
+  return trimmed.split(/[\s,]+/).map((item) => item.trim()).filter(Boolean);
+};
+
+const appConfigClients = (config: AppConfig): AppConfigClient[] => {
+  const clients: AppConfigClient[] = [];
+
+  if (Array.isArray(config.clients)) {
+    clients.push(...config.clients);
+  }
+
+  if (config.oauth?.clients && Array.isArray(config.oauth.clients)) {
+    clients.push(...config.oauth.clients);
+  }
+
+  const oauthAsClient: AppConfigClient | undefined =
+    config.oauth?.client_id || config.oauth?.client
+      ? {
+          client_id: config.oauth?.client?.client_id ?? config.oauth?.client_id,
+          client_secret:
+            config.oauth?.client?.client_secret ?? config.oauth?.client_secret,
+          client_name:
+            config.oauth?.client?.client_name ?? config.oauth?.client_name,
+          application_type:
+            config.oauth?.client?.application_type ??
+            config.oauth?.application_type,
+          redirect_uris:
+            config.oauth?.client?.redirect_uris ??
+            config.oauth?.redirect_uris ??
+            [],
+          grant_types:
+            config.oauth?.client?.grant_types ??
+            config.oauth?.grant_types ??
+            [],
+          scope: config.oauth?.client?.scope ?? config.oauth?.scope,
+          token_endpoint_auth_method:
+            config.oauth?.client?.token_endpoint_auth_method ??
+            config.oauth?.token_endpoint_auth_method,
+          registration_access_token:
+            config.oauth?.client?.registration_access_token ??
+            config.oauth?.registration_access_token,
+          registration_client_uri:
+            config.oauth?.client?.registration_client_uri ??
+            config.oauth?.registration_client_uri,
+          client_id_issued_at:
+            config.oauth?.client?.client_id_issued_at ??
+            config.oauth?.client_id_issued_at,
+          client_secret_expires_at:
+            config.oauth?.client?.client_secret_expires_at ??
+            config.oauth?.client_secret_expires_at,
+          resource_uri:
+            config.oauth?.client?.resource_uri ?? config.oauth?.resource_uri,
+          resource: config.oauth?.client?.resource ?? config.oauth?.resource,
+          default_scopes:
+            config.oauth?.client?.default_scopes ??
+            config.oauth?.default_scopes,
+        }
+      : undefined;
+
+  if (oauthAsClient?.client_id) {
+    clients.push(oauthAsClient);
+  }
+
+  return clients
+    .filter(
+      (client): client is AppConfigClient =>
+        Boolean(client && client.client_id && String(client.client_id).trim())
+    )
+    .map((client) => ({
+      ...client,
+      client_id: client.client_id
+        ? String(client.client_id).trim()
+        : undefined,
+    }));
+};
+
+const dedupeClients = (clients: AppConfigClient[]): AppConfigClient[] => {
+  const seen = new Map<string, AppConfigClient>();
+  clients.forEach((client) => {
+    if (client.client_id) {
+      seen.set(client.client_id, { ...client });
+    }
+  });
+  return Array.from(seen.values());
+};
+
+const withClientsInConfig = (
+  config: AppConfig,
+  clients: AppConfigClient[]
+): AppConfig => {
+  const deduped = dedupeClients(clients);
+  return {
+    ...config,
+    clients: deduped,
+    oauth: {
+      ...(config.oauth ?? {}),
+      clients: deduped,
+    },
+  };
+};
+
+const appRowToApp = (row?: AppRow | null): App | undefined => {
+  if (!row) {
+    return undefined;
+  }
+  const config = parseAppConfig(row.config);
+  const resourceUri = resourceFromConfig(config) ?? "";
+  const defaultScopes = defaultScopesFromConfig(config);
+  return {
+    id: row.id,
+    uuid: row.id,
+    name: row.name,
+    resource_uri: resourceUri,
+    default_scopes: defaultScopes.join(" "),
+    status: row.status ?? undefined,
+    config,
+  };
+};
+
+const appConfigClientToClient = (
+  clientConfig: AppConfigClient,
+  app: App
+): Client => {
+  const redirectUris = coerceStringArray(clientConfig.redirect_uris);
+  const grantTypes = coerceStringArray(clientConfig.grant_types);
+  const scopeString =
+    clientConfig.scope ||
+    defaultScopesFromConfig(app.config).join(" ") ||
+    app.default_scopes ||
+    DEFAULT_SCOPE_FALLBACK.join(" ");
+
+  return {
+    client_id: clientConfig.client_id ?? "",
+    client_secret: clientConfig.client_secret ?? null,
+    client_name: clientConfig.client_name ?? app.name,
+    token_endpoint_auth_method:
+      clientConfig.token_endpoint_auth_method ?? "none",
+    application_type: clientConfig.application_type ?? "web",
+    redirect_uris: redirectUris.length > 0 ? redirectUris : [],
+    grant_types:
+      grantTypes.length > 0
+        ? grantTypes
+        : ["authorization_code", "refresh_token"],
+    scope: scopeString,
+    app_uuid: app.id,
+    registration_access_token: clientConfig.registration_access_token ?? null,
+    registration_client_uri: clientConfig.registration_client_uri ?? null,
+    client_id_issued_at: clientConfig.client_id_issued_at ?? 0,
+    client_secret_expires_at: clientConfig.client_secret_expires_at ?? 0,
+  };
+};
+
+const userRowToUser = (row?: AppUserRow | null): User | undefined =>
+  row
     ? {
-        token: row.token,
-        user_uuid: row.user_uuid,
-        client_id: row.client_id,
-        scope: row.scope,
-        resource: row.resource,
-        expires_at: row.expires_at,
+        uuid: row.id,
+        email: (row.email ?? "").toLowerCase(),
+        password_hash: row.password_hash ?? undefined,
+        display_name: row.name ?? undefined,
+        app_id: row.app_id ?? undefined,
+        auth_provider: row.auth_provider ?? undefined,
+        firebase_uid: row.firebase_uid ?? undefined,
+        provider_user_id: row.provider_user_id ?? undefined,
+      }
+    : undefined;
+
+const parseScopes = (scopeString?: string | null): string[] =>
+  scopeString
+    ? scopeString
+        .split(" ")
+        .map((scope) => scope.trim())
+        .filter(Boolean)
+    : [];
+
+const normalizeResource = (value: string): string =>
+  value.endsWith("/") && value.length > 1
+    ? value.replace(/\/+$/, "")
+    : value;
+
+const fetchAllApps = async (): Promise<App[]> => {
+  const { data, error } = await supabase
+    .from("apps")
+    .select("id,name,config,status,created_at,updated_at");
+  if (error) {
+    throw new Error(`Failed to fetch apps: ${error.message}`);
+  }
+  return (data ?? [])
+    .map((row) => appRowToApp(row as AppRow))
+    .filter((app): app is App => Boolean(app));
+};
+
+const locateAppByClientId = async (
+  clientId: string
+): Promise<{ app: App; clientConfig: AppConfigClient }> => {
+  const apps = await fetchAllApps();
+  for (const app of apps) {
+    const clients = appConfigClients(app.config);
+    const match = clients.find(
+      (client) => client.client_id === clientId
+    );
+    if (match) {
+      return { app, clientConfig: match };
+    }
+  }
+  throw new Error(`Client ${clientId} not found in any app config.`);
+};
+
+const updateAppConfig = async (appId: string, config: AppConfig) => {
+  const { error } = await supabase
+    .from("apps")
+    .update({
+      config: serializeAppConfig(config),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", appId);
+  if (error) {
+    throw new Error(`Failed to update app config: ${error.message}`);
+  }
+};
+
+export const findUserByEmail = async (
+  email: string
+): Promise<User | undefined> => {
+  const normalizedEmail = email.trim().toLowerCase();
+  const { data, error } = await supabase
+    .from("app_users")
+    .select("*")
+    .ilike("email", normalizedEmail)
+    .maybeSingle();
+  if (error) {
+    throw new Error(`Failed to fetch user by email: ${error.message}`);
+  }
+  return userRowToUser((data as AppUserRow | null) ?? undefined);
+};
+
+export const findUserByUuid = async (
+  uuid: string
+): Promise<User | undefined> => {
+  const { data, error } = await supabase
+    .from("app_users")
+    .select("*")
+    .eq("id", uuid)
+    .maybeSingle();
+  if (error) {
+    throw new Error(`Failed to fetch user by id: ${error.message}`);
+  }
+  return userRowToUser((data as AppUserRow | null) ?? undefined);
+};
+
+export const createUser = async (
+  email: string,
+  passwordHash: string,
+  displayName?: string,
+  options?: {
+    appId?: string;
+    authProvider?: string;
+    firebaseUid?: string;
+    providerUserId?: string;
+  }
+): Promise<User> => {
+  const id = randomUUID();
+  const now = new Date().toISOString();
+  const payload = {
+    id,
+    email: email.toLowerCase(),
+    password_hash: passwordHash,
+    name: displayName ?? null,
+    app_id: options?.appId ?? null,
+    auth_provider: options?.authProvider ?? null,
+    firebase_uid: options?.firebaseUid ?? null,
+    provider_user_id: options?.providerUserId ?? null,
+    created_at: now,
+    updated_at: now,
+  };
+  const { data, error } = await supabase
+    .from("app_users")
+    .insert(payload)
+    .select("*")
+    .single();
+  if (error || !data) {
+    throw new Error(`Failed to create user: ${error?.message ?? "unknown"}`);
+  }
+  return userRowToUser(data as AppUserRow)!;
+};
+
+export const findAppByResource = async (
+  resourceUri: string
+): Promise<App | undefined> => {
+  const target = normalizeResource(resourceUri);
+  const apps = await fetchAllApps();
+  return apps.find(
+    (app) =>
+      app.resource_uri &&
+      normalizeResource(app.resource_uri) === target
+  );
+};
+
+export const findAppByUuid = async (uuid: string): Promise<App | undefined> => {
+  const { data, error } = await supabase
+    .from("apps")
+    .select("id,name,config,status,created_at,updated_at")
+    .eq("id", uuid)
+    .maybeSingle();
+  if (error) {
+    throw new Error(`Failed to fetch app by id: ${error.message}`);
+  }
+  return appRowToApp((data as AppRow | null) ?? undefined);
+};
+
+export const listApps = async (): Promise<App[]> => {
+  return fetchAllApps();
+};
+
+export const getAppScopes = (app: App): string[] => {
+  const configScopes = defaultScopesFromConfig(app.config);
+  if (configScopes.length > 0) {
+    return configScopes;
+  }
+  const storedScopes = parseScopes(app.default_scopes);
+  if (storedScopes.length > 0) {
+    return storedScopes;
+  }
+  const clientScopes = appConfigClients(app.config)
+    .map((client) => normalizeScopeInput(client.scope))
+    .find((scopes) => scopes.length > 0);
+  if (clientScopes && clientScopes.length > 0) {
+    return clientScopes;
+  }
+  return [...DEFAULT_SCOPE_FALLBACK];
+};
+
+export const getAllSupportedScopes = async (): Promise<string[]> => {
+  const scopeSet = new Set<string>();
+  const apps = await listApps();
+  apps.forEach((app) => {
+    getAppScopes(app).forEach((scope) => scopeSet.add(scope));
+  });
+  if (scopeSet.size === 0) {
+    DEFAULT_SCOPE_FALLBACK.forEach((scope) => scopeSet.add(scope));
+  }
+  return Array.from(scopeSet);
+};
+
+export const findClientById = async (
+  clientId: string
+): Promise<Client | undefined> => {
+  try {
+    const { app, clientConfig } = await locateAppByClientId(clientId);
+    return appConfigClientToClient(clientConfig, app);
+  } catch {
+    return undefined;
+  }
+};
+
+export const findClientByRegistrationAccessToken = async (
+  token: string
+): Promise<Client | undefined> => {
+  const apps = await fetchAllApps();
+  for (const app of apps) {
+    const clients = appConfigClients(app.config);
+    const match = clients.find(
+      (client) => client.registration_access_token === token
+    );
+    if (match) {
+      return appConfigClientToClient(match, app);
+    }
+  }
+  return undefined;
+};
+
+export const createClient = async (
+  client: Omit<
+    Client,
+    | "client_id"
+    | "client_secret"
+    | "client_id_issued_at"
+    | "client_secret_expires_at"
+    | "registration_access_token"
+    | "registration_client_uri"
+  >
+): Promise<Client> => {
+  const app = await findAppByUuid(client.app_uuid);
+  if (!app) {
+    throw new Error(`App ${client.app_uuid} not found.`);
+  }
+
+  const configClone: AppConfig = JSON.parse(
+    JSON.stringify(app.config ?? {})
+  );
+  const clients = appConfigClients(configClone);
+
+  const clientId = randomUUID();
+  const issuedAt = Math.floor(Date.now() / 1000);
+  const clientSecret =
+    client.token_endpoint_auth_method === "none"
+      ? null
+      : crypto.randomBytes(32).toString("hex");
+  const secretExpiresAt =
+    client.token_endpoint_auth_method === "none"
+      ? 0
+      : issuedAt + CONFIG.refreshTokenTtlSeconds;
+  const registrationAccessToken = crypto.randomBytes(32).toString("hex");
+  const registrationClientUri = `${CONFIG.issuer}/oauth/client/${clientId}`;
+
+  const newClientConfig: AppConfigClient = {
+    client_id: clientId,
+    client_secret: clientSecret,
+    client_name: client.client_name ?? app.name,
+    application_type: client.application_type,
+    redirect_uris: client.redirect_uris,
+    grant_types: client.grant_types,
+    scope: client.scope ?? getAppScopes(app).join(" "),
+    token_endpoint_auth_method: client.token_endpoint_auth_method,
+    registration_access_token: registrationAccessToken,
+    registration_client_uri: registrationClientUri,
+    client_id_issued_at: issuedAt,
+    client_secret_expires_at: secretExpiresAt,
+  };
+
+  // Ensure clients are tracked under config.clients for persistence.
+  const nextConfig = withClientsInConfig(configClone, [...clients, newClientConfig]);
+
+  await updateAppConfig(app.id, nextConfig);
+
+  const updatedApp = await findAppByUuid(app.id);
+  if (!updatedApp) {
+    throw new Error("App disappeared after updating client configuration.");
+  }
+
+  return appConfigClientToClient(newClientConfig, updatedApp);
+};
+
+export const updateClientScopes = async (
+  clientId: string,
+  scope: string
+): Promise<void> => {
+  const { app } = await locateAppByClientId(clientId);
+  const configClone: AppConfig = JSON.parse(
+    JSON.stringify(app.config ?? {})
+  );
+  const clients = appConfigClients(configClone);
+  let updated = false;
+  const nextClients = clients.map((clientConfig) => {
+    if (clientConfig.client_id === clientId) {
+      updated = true;
+      return {
+        ...clientConfig,
+        scope,
+      };
+    }
+    return clientConfig;
+  });
+
+  if (!updated) {
+    throw new Error(`Client ${clientId} not found for scope update.`);
+  }
+
+  const nextConfig = withClientsInConfig(configClone, nextClients);
+  await updateAppConfig(app.id, nextConfig);
+};
+
+export const persistAuthorizationCode = async (
+  code: AuthorizationCode
+): Promise<void> => {
+  const { app } = await locateAppByClientId(code.client_id);
+  const configClone: AppConfig = JSON.parse(
+    JSON.stringify(app.config ?? {})
+  );
+  const existing = Array.isArray(configClone.authorization_codes)
+    ? configClone.authorization_codes.filter(
+        (record): record is AppAuthorizationCodeRecord =>
+          record &&
+          typeof record === "object" &&
+          typeof (record as AppAuthorizationCodeRecord).code === "string"
+      )
+    : [];
+  const nextRecords = existing.filter(
+    (record) => record.code !== code.code
+  );
+  nextRecords.push({
+    code: code.code,
+    user_uuid: code.user_uuid,
+    client_id: code.client_id,
+    redirect_uri: code.redirect_uri,
+    scope: code.scope,
+    code_challenge: code.code_challenge,
+    code_challenge_method: code.code_challenge_method,
+    resource: code.resource,
+    expires_at: code.expires_at,
+    consumed: code.consumed,
+  });
+  configClone.authorization_codes = nextRecords;
+  await updateAppConfig(app.id, configClone);
+};
+
+export const consumeAuthorizationCode = async (
+  codeValue: string
+): Promise<AuthorizationCode | undefined> => {
+  const apps = await fetchAllApps();
+  for (const app of apps) {
+    const records = Array.isArray(app.config.authorization_codes)
+      ? app.config.authorization_codes.filter(
+          (record): record is AppAuthorizationCodeRecord =>
+            record &&
+            typeof record === "object" &&
+            (record as AppAuthorizationCodeRecord).code === codeValue
+        )
+      : [];
+    const match = records.find(
+      (record) => record.code === codeValue && record.consumed === 0
+    );
+    if (!match) {
+      continue;
+    }
+    const updatedRecords = Array.isArray(app.config.authorization_codes)
+      ? app.config.authorization_codes.map((record) => {
+          if (
+            record &&
+            typeof record === "object" &&
+            (record as AppAuthorizationCodeRecord).code === codeValue
+          ) {
+            return {
+              ...(record as AppAuthorizationCodeRecord),
+              consumed: 1,
+            };
+          }
+          return record;
+        })
+      : [];
+    const configClone: AppConfig = JSON.parse(
+      JSON.stringify(app.config ?? {})
+    );
+    configClone.authorization_codes = updatedRecords.filter(
+      (record): record is AppAuthorizationCodeRecord =>
+        record !== undefined && record !== null
+    );
+    await updateAppConfig(app.id, configClone);
+    return {
+      code: match.code,
+      user_uuid: match.user_uuid,
+      client_id: match.client_id,
+      redirect_uri: match.redirect_uri,
+      scope: match.scope,
+      code_challenge: match.code_challenge,
+      code_challenge_method: match
+        .code_challenge_method as AuthorizationCode["code_challenge_method"],
+      resource: match.resource,
+      expires_at: match.expires_at,
+      consumed: 1,
+    };
+  }
+  return undefined;
+};
+
+export const storeAccessToken = async (token: StoredToken): Promise<void> => {
+  const { error } = await supabase.from("access_tokens").insert({
+    token: token.token,
+    user_uuid: token.user_uuid,
+    client_id: token.client_id,
+    scope: token.scope,
+    resource: token.resource,
+    expires_at: token.expires_at,
+  });
+  if (error) {
+    throw new Error(`Failed to store access token: ${error.message}`);
+  }
+};
+
+export const storeRefreshToken = async (token: StoredToken): Promise<void> => {
+  const { error } = await supabase.from("refresh_tokens").insert({
+    token: token.token,
+    user_uuid: token.user_uuid,
+    client_id: token.client_id,
+    scope: token.scope,
+    resource: token.resource,
+    expires_at: token.expires_at,
+  });
+  if (error) {
+    throw new Error(`Failed to store refresh token: ${error.message}`);
+  }
+};
+
+export const findRefreshToken = async (
+  token: string
+): Promise<StoredToken | undefined> => {
+  const { data, error } = await supabase
+    .from("refresh_tokens")
+    .select("*")
+    .eq("token", token)
+    .maybeSingle();
+  if (error) {
+    throw new Error(`Failed to fetch refresh token: ${error.message}`);
+  }
+  return data
+    ? {
+        token: (data as TokenRow).token,
+        user_uuid: (data as TokenRow).user_uuid,
+        client_id: (data as TokenRow).client_id,
+        scope: (data as TokenRow).scope,
+        resource: (data as TokenRow).resource,
+        expires_at: (data as TokenRow).expires_at,
       }
     : undefined;
 };
 
-export const revokeRefreshToken = (token: string) => {
-  const stmt = db.prepare("DELETE FROM refresh_tokens WHERE token = ?");
-  stmt.run(token);
+export const revokeRefreshToken = async (token: string): Promise<void> => {
+  const { error } = await supabase
+    .from("refresh_tokens")
+    .delete()
+    .eq("token", token);
+  if (error) {
+    throw new Error(`Failed to revoke refresh token: ${error.message}`);
+  }
 };
 
-export const validateScopes = (requestedScopes: string[]): string[] => {
-  return requestedScopes.filter((scope) => SUPPORTED_SCOPES.includes(scope));
+export const validateScopes = (
+  app: App,
+  requestedScopes: string[]
+): string[] => {
+  const allowed = new Set(getAppScopes(app));
+  return requestedScopes.filter((scope) => allowed.has(scope));
 };
