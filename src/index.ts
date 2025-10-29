@@ -2111,17 +2111,25 @@ app.post("/oauth/register", async (req, res) => {
       .json({ error: "invalid_request", error_description: "Malformed registration payload." });
   }
   const data = parsed.data;
-  if (!data.resource) {
-    return res.status(400).json({
-      error: "invalid_target",
-      error_description: "resource is required for multi-MCP registration.",
-    });
-  }
-  const appRecord = await findAppByResource(data.resource);
-  if (!appRecord) {
-    return res
-      .status(400)
-      .json({ error: "invalid_target", error_description: "Unknown resource." });
+  let appRecord: App | undefined;
+  if (data.resource) {
+    appRecord = await findAppByResource(data.resource);
+    if (!appRecord) {
+      return res.status(400).json({
+        error: "invalid_target",
+        error_description: "Unknown resource.",
+      });
+    }
+  } else {
+    const apps = await listApps();
+    if (apps.length === 1) {
+      appRecord = apps[0];
+    } else {
+      return res.status(400).json({
+        error: "invalid_target",
+        error_description: "resource is required for multi-MCP registration.",
+      });
+    }
   }
   const requestedScopeString = data.scope ?? appRecord.default_scopes;
   const requestedScopes = requestedScopeString.split(" ").filter(Boolean);
