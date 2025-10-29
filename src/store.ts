@@ -336,18 +336,85 @@ const dedupeClients = (clients: AppConfigClient[]): AppConfigClient[] => {
   return Array.from(seen.values());
 };
 
+const isDynamicClient = (client: AppConfigClient): boolean => {
+  return Boolean(
+    client.registration_client_uri ||
+      client.registration_access_token ||
+      client.client_id_issued_at
+  );
+};
+
 const withClientsInConfig = (
   config: AppConfig,
   clients: AppConfigClient[]
 ): AppConfig => {
   const deduped = dedupeClients(clients);
+  const primary = deduped[deduped.length - 1];
+
+  const nextOauth: NonNullable<AppConfig["oauth"]> = {
+    ...(config.oauth ?? {}),
+    clients: deduped,
+  };
+
+  if (primary) {
+    nextOauth.client = {
+      ...(primary as AppConfigClient),
+    };
+    nextOauth.client_id = primary.client_id;
+    nextOauth.client_secret =
+      primary.client_secret ?? nextOauth.client_secret ?? undefined;
+    nextOauth.client_name =
+      primary.client_name ?? nextOauth.client_name ?? undefined;
+    nextOauth.application_type =
+      primary.application_type ?? nextOauth.application_type ?? undefined;
+    nextOauth.redirect_uris =
+      primary.redirect_uris ?? nextOauth.redirect_uris ?? [];
+    nextOauth.grant_types =
+      primary.grant_types ?? nextOauth.grant_types ?? [];
+    nextOauth.scope = primary.scope ?? nextOauth.scope ?? undefined;
+    nextOauth.token_endpoint_auth_method =
+      primary.token_endpoint_auth_method ??
+      nextOauth.token_endpoint_auth_method ??
+      undefined;
+    nextOauth.registration_access_token =
+      primary.registration_access_token ??
+      nextOauth.registration_access_token ??
+      undefined;
+    nextOauth.registration_client_uri =
+      primary.registration_client_uri ??
+      nextOauth.registration_client_uri ??
+      undefined;
+    nextOauth.client_id_issued_at =
+      primary.client_id_issued_at ??
+      nextOauth.client_id_issued_at ??
+      undefined;
+    nextOauth.client_secret_expires_at =
+      primary.client_secret_expires_at ??
+      nextOauth.client_secret_expires_at ??
+      undefined;
+    nextOauth.resource_uri =
+      primary.resource_uri ??
+      nextOauth.resource_uri ??
+      config.resource_uri ??
+      config.resource ??
+      undefined;
+    nextOauth.resource =
+      primary.resource ??
+      nextOauth.resource ??
+      config.resource ??
+      config.resource_uri ??
+      undefined;
+    nextOauth.default_scopes =
+      primary.default_scopes ??
+      nextOauth.default_scopes ??
+      config.default_scopes ??
+      undefined;
+  }
+
   return {
     ...config,
     clients: deduped,
-    oauth: {
-      ...(config.oauth ?? {}),
-      clients: deduped,
-    },
+    oauth: nextOauth,
   };
 };
 
@@ -640,6 +707,7 @@ export const createClient = async (
     JSON.stringify(app.config ?? {})
   );
   const clients = appConfigClients(configClone);
+  const staticClients = clients.filter((existing) => !isDynamicClient(existing));
 
   const clientId = randomUUID();
   const issuedAt = Math.floor(Date.now() / 1000);
@@ -670,7 +738,10 @@ export const createClient = async (
   };
 
   // Ensure clients are tracked under config.clients for persistence.
-  const nextConfig = withClientsInConfig(configClone, [...clients, newClientConfig]);
+  const nextConfig = withClientsInConfig(configClone, [
+    ...staticClients,
+    newClientConfig,
+  ]);
 
   await updateAppConfig(app.id, nextConfig);
 

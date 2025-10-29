@@ -104,6 +104,17 @@ type RenderOptions = {
   scripts?: string;
 };
 
+type AuthResumePayload = {
+  response_type: "code";
+  client_id: string;
+  redirect_uri: string;
+  scope: string;
+  state?: string;
+  code_challenge: string;
+  code_challenge_method: "S256";
+  resource: string;
+};
+
 const renderPage = (
   title: string,
   body: string,
@@ -193,7 +204,7 @@ const buildFirebaseUiSnippet = (mode: FirebaseUiMode = "auth"): string => {
     return "";
   }
   const modeLabel =
-    mode === "register" ? "注册" : mode === "login" ? "登录" : "登录/注册";
+    mode === "register" ? "Sign up" : mode === "login" ? "Sign in" : "Sign in/up";
   return `
     ${buildFirebaseInitScript()}
     <link
@@ -206,6 +217,7 @@ const buildFirebaseUiSnippet = (mode: FirebaseUiMode = "auth"): string => {
         const firebaseConfig = window.__firebaseConfig;
         const authModeLabel = "${modeLabel}";
         const authState = window.__authState || {};
+        const resumeAuth = authState?.resumeAuth || null;
         if (!firebaseConfig) {
           console.warn("Firebase config missing, cannot start FirebaseUI.");
           return;
@@ -320,15 +332,19 @@ const buildFirebaseUiSnippet = (mode: FirebaseUiMode = "auth"): string => {
             signInSuccessWithAuthResult: async function (authResult) {
               const email =
                 authResult?.user?.email || authResult?.user?.uid || "";
-              setStatus("loading", "Firebase " + authModeLabel + "成功：" + email + "，正在验证...");
+              setStatus("loading", "Firebase " + authModeLabel + " successful: " + email + ", verifying...");
               try {
                 const idToken = await authResult.user.getIdToken();
+                const requestPayload = { idToken };
+                if (resumeAuth) {
+                  requestPayload.resume = resumeAuth;
+                }
                 const response = await fetch("/auth/firebase/session", {
                   method: "POST",
                   headers: {
                     "Content-Type": "application/json",
                   },
-                  body: JSON.stringify({ idToken }),
+                  body: JSON.stringify(requestPayload),
                   credentials: "same-origin",
                 });
                 const payload = await response.json().catch(() => ({}));
@@ -336,10 +352,11 @@ const buildFirebaseUiSnippet = (mode: FirebaseUiMode = "auth"): string => {
                   const message =
                     payload?.error ||
                     payload?.message ||
-                    "服务器未能完成登录验证。";
+                    "Server failed to complete login verification.";
                   throw new Error(message);
                 }
-                setStatus("success", "登录成功，正在跳转...");
+                setStatus("success", "Login successful, redirecting...");
+                console.log("payload", payload);
                 if (payload.redirect) {
                   window.location.assign(payload.redirect);
                 } else if (authState?.pendingAuth) {
@@ -351,7 +368,7 @@ const buildFirebaseUiSnippet = (mode: FirebaseUiMode = "auth"): string => {
                 console.error("Firebase login verification failed", err);
                 setStatus(
                   "error",
-                  "Firebase 登录验证失败：" + (err?.message || "未知错误")
+                  "Firebase login verification failed: " + (err?.message || "Unknown error")
                 );
               }
               return false;
@@ -362,8 +379,8 @@ const buildFirebaseUiSnippet = (mode: FirebaseUiMode = "auth"): string => {
                 "error",
                 "Firebase " +
                   authModeLabel +
-                  "失败：" +
-                  (error?.message ?? "未知错误")
+                  " failed: " +
+                  (error?.message ?? "Unknown error")
               );
               return Promise.resolve();
             },
@@ -403,6 +420,7 @@ type AppOverviewOptions = {
   };
   autoOpenFirebase?: boolean;
   currentUserEmail?: string;
+  authResume?: AuthResumePayload;
 };
 
 type FirebaseAccountRecord = {
@@ -415,7 +433,7 @@ const verifyFirebaseIdToken = async (
   idToken: string
 ): Promise<FirebaseAccountRecord> => {
   if (!CONFIG.firebaseClientConfig?.apiKey) {
-    throw new Error("Firebase 未配置 API Key，无法验证登录。");
+    throw new Error("Firebase API Key not configured, cannot verify login.");
   }
   const apiKey = CONFIG.firebaseClientConfig.apiKey;
   const payload = JSON.stringify({ idToken });
@@ -446,8 +464,8 @@ const verifyFirebaseIdToken = async (
           } else {
             reject(
               new Error(
-                `Firebase 验证失败 (status ${res.statusCode ?? "unknown"}): ${
-                  data || "无响应内容"
+                `Firebase verification failed (status ${res.statusCode ?? "unknown"}): ${
+                  data || "No response content"
                 }`
               )
             );
@@ -472,12 +490,12 @@ const verifyFirebaseIdToken = async (
   try {
     parsed = JSON.parse(responseBody) as FirebaseLookupResponse;
   } catch {
-    throw new Error("无法解析 Firebase 返回的数据。");
+    throw new Error("Cannot parse Firebase return data.");
   }
 
   const user = parsed.users?.[0];
   if (!user?.email) {
-    throw new Error("Firebase 账号缺少邮箱信息。");
+    throw new Error("Firebase account missing email information.");
   }
 
   return {
@@ -734,11 +752,11 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
   const pendingAuthSummary = pendingAuth
     ? `
       <div class="p-6 bg-indigo-50 border border-indigo-200 rounded-2xl shadow-sm mb-6">
-        <p class="text-xs font-semibold uppercase tracking-wide text-indigo-600">待处理授权请求</p>
+        <p class="text-xs font-semibold uppercase tracking-wide text-indigo-600">Pending authorization request</p>
         <p class="mt-3 text-base text-indigo-900">
-          即将为 <span class="font-semibold">${escapeHtml(
+          The client <span class="font-semibold">${escapeHtml(
             pendingAuth.clientName
-          )}</span> 授权以下权限，并在完成后跳转回：
+          )}</span> will be authorized with the following permissions, and will redirect back after completion:
         </p>
         <p class="mt-2 text-sm text-indigo-800 break-all">
           <code class="bg-white/60 px-1.5 py-0.5 rounded">${escapeHtml(
@@ -761,9 +779,9 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
 
   let clientDetails = `
     <div class="p-8 bg-white border border-gray-200 rounded-2xl shadow-sm">
-      <h3 class="text-2xl font-semibold text-gray-900 mb-4">应用信息</h3>
+      <h3 class="text-2xl font-semibold text-gray-900 mb-4">Application information</h3>
       <p class="text-gray-600 leading-relaxed">
-        使用右侧查询面板输入 <code class="px-1.5 py-0.5 bg-slate-100 rounded text-sm text-slate-700">client_id</code>，即可查看该客户端绑定的资源与权限设置。
+        Use the query panel on the right to input <code class="px-1.5 py-0.5 bg-slate-100 rounded text-sm text-slate-700">client_id</code>, to view the resources and permissions bound to the client.
       </p>
     </div>
   `;
@@ -771,11 +789,11 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
   if (clientId && !app && !client && !error) {
     clientDetails = `
       <div class="p-8 bg-white border border-gray-200 rounded-2xl shadow-sm">
-        <h3 class="text-2xl font-semibold text-gray-900 mb-4">未找到客户端</h3>
+        <h3 class="text-2xl font-semibold text-gray-900 mb-4">Client not found</h3>
         <p class="text-rose-600 text-base">
-          没有找到 client_id 为 <code class="px-1.5 py-0.5 bg-rose-50 rounded text-sm text-rose-700">${escapeHtml(
+          No client record found for client_id <code class="px-1.5 py-0.5 bg-rose-50 rounded text-sm text-rose-700">${escapeHtml(
             clientId
-          )}</code> 的客户端记录。
+          )}</code> client record.
         </p>
       </div>
     `;
@@ -784,7 +802,7 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
   if (error) {
     clientDetails = `
       <div class="p-8 bg-white border border-rose-200 rounded-2xl shadow-sm">
-        <h3 class="text-2xl font-semibold text-gray-900 mb-4">加载失败</h3>
+        <h3 class="text-2xl font-semibold text-gray-900 mb-4">Load failed</h3>
         <p class="text-rose-600 text-base">${escapeHtml(error)}</p>
       </div>
     `;
@@ -801,7 +819,7 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
               )}</span>`
           )
           .join("")
-      : '<span class="text-sm text-gray-500">该应用未配置默认 scopes。</span>';
+      : '<span class="text-sm text-gray-500">The application has not configured default scopes.</span>';
     const redirectList = client.redirect_uris.length
       ? client.redirect_uris
           .map(
@@ -811,14 +829,14 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
               )}</code></li>`
           )
           .join("")
-      : '<li class="text-sm text-gray-500">该客户端未配置 redirect URIs。</li>';
+      : '<li class="text-sm text-gray-500">The client has not configured redirect URIs.</li>';
     clientDetails = `
       <div class="p-8 bg-white border border-gray-200 rounded-2xl shadow-sm space-y-4">
         <div>
           <h3 class="text-2xl font-semibold text-gray-900 mb-1">${escapeHtml(app.name)}</h3>
           ${
             client.client_name
-              ? `<p class="text-gray-600">Client 名称：<span class="font-medium text-gray-900">${escapeHtml(
+              ? `<p class="text-gray-600">Client name: <span class="font-medium text-gray-900">${escapeHtml(
                   client.client_name
                 )}</span></p>`
               : ""
@@ -839,7 +857,7 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
           </div>
         </div>
         <div class="space-y-2">
-          <p class="text-sm text-gray-500 uppercase tracking-wide">默认 scopes</p>
+          <p class="text-sm text-gray-500 uppercase tracking-wide">Default scopes</p>
           <div class="flex flex-wrap gap-2">${scopesList}</div>
         </div>
         <div class="space-y-2">
@@ -857,30 +875,30 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
       <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="grid md:grid-cols-2 gap-12 items-center">
           <div>
-            <h2 class="text-3xl md:text-4xl font-bold mb-4">Firebase 登录 / 注册</h2>
+            <h2 class="text-3xl md:text-4xl font-bold mb-4">Firebase Sign in / Sign up</h2>
             <p class="text-slate-300 leading-relaxed mb-6">
               ${
                 hasFirebase
-                  ? "页面加载后将自动弹出 Firebase 登录弹窗；可随时使用下方按钮重新打开。"
-                  : "当前缺少 Firebase 配置，无法呈现 FirebaseUI 组件。请完善环境变量后重试。"
+                  ? "The Firebase login window will automatically pop up after page load; you can use the button below to reopen it at any time."
+                  : "The Firebase configuration is missing, cannot display the FirebaseUI component. Please complete the environment variables and try again."
               }
             </p>
             <ul class="space-y-2 text-sm text-slate-300">
-              <li>• 支持多种 Firebase 提供商（Email、Google、GitHub 等）。</li>
-              <li>• 登录成功后将自动继续授权流程并跳转回客户端。</li>
-              <li>• 若需要自定义回调，可在 <code class="bg-white/10 rounded px-1.5 py-0.5">config.ts</code> 中调整。</li>
+              <li>• Supports multiple Firebase providers (Email, Google, GitHub, etc.).</li>
+              <li>• After successful login, the authorization process will continue automatically and redirect back to the client.</li>
+              <li>• If you need to customize the callback, you can adjust it in <code class="bg-white/10 rounded px-1.5 py-0.5">config.ts</code>.</li>
             </ul>
           </div>
           <div class="bg-white text-gray-900 rounded-2xl shadow-2xl p-6 md:p-8 space-y-4">
             <p class="text-sm text-slate-600">
-              准备好后点击下方按钮，可再次打开 Firebase 登录弹窗以切换账号或重新验证。
+              After ready, click the button below to reopen the Firebase login window to switch accounts or re-verify.
             </p>
             <button
               type="button"
               data-firebase-modal-trigger
               class="inline-flex items-center justify-center w-full px-5 py-3 bg-gray-900 text-white rounded-lg font-semibold hover:bg-black transition-colors"
             >
-              打开 Firebase 登录弹窗
+              Open Firebase login window
             </button>
           </div>
         </div>
@@ -903,13 +921,13 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
           <div class="bg-white rounded-2xl shadow-2xl overflow-hidden">
             <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200">
               <div>
-                <p class="text-sm font-semibold text-indigo-600">Firebase 登录</p>
-                <h3 class="text-lg font-bold text-gray-900 mt-1">使用 Firebase 登录</h3>
+                <p class="text-sm font-semibold text-indigo-600">Firebase Sign in</p>
+                <h3 class="text-lg font-bold text-gray-900 mt-1">Use Firebase Sign in</h3>
               </div>
               <button
                 id="close-firebase-modal"
                 class="p-2 text-gray-500 hover:text-gray-900 transition-colors"
-                aria-label="关闭登录弹窗"
+                aria-label="Close login window"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
@@ -987,9 +1005,9 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
         <div class="grid lg:grid-cols-[1fr,1fr] gap-10">
           ${clientDetailsBlock}
           <div class="p-8 bg-slate-900 text-white rounded-2xl shadow-2xl">
-            <h3 class="text-2xl font-semibold mb-4">查询客户端</h3>
+            <h3 class="text-2xl font-semibold mb-4">Query client</h3>
             <p class="text-slate-300 text-sm leading-relaxed mb-6">
-              输入想要查看的 <span class="font-semibold">client_id</span>，即可加载该客户端的注册信息与默认 scopes。
+              Input the <span class="font-semibold">client_id</span> you want to view, to load the registration information and default scopes of the client.
             </p>
             <form method="get" action="/" class="space-y-4">
               <label class="block">
@@ -998,7 +1016,7 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
                   type="text"
                   name="client_id"
                   value="${clientId ? escapeHtml(clientId) : ""}"
-                  placeholder="输入 client_id"
+                  placeholder="Input client_id"
                   class="mt-1 w-full px-4 py-3 rounded-lg bg-white text-gray-900 placeholder:text-gray-400 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-white/60"
                 />
               </label>
@@ -1006,11 +1024,11 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
                 type="submit"
                 class="w-full inline-flex items-center justify-center gap-2 px-6 py-3 bg-white text-gray-900 font-semibold rounded-lg hover:bg-slate-100 transition-colors"
               >
-                查看客户端详情
+                View client details
               </button>
             </form>
             <p class="mt-6 text-xs text-slate-400 leading-relaxed">
-              提示：在 OAuth 回调中附带 <code class="bg-white/10 px-1.5 py-0.5 rounded text-white">?client_id=</code> 参数，也能直接跳转到此页面的查询结果。
+              Tip: The <code class="bg-white/10 px-1.5 py-0.5 rounded text-white">?client_id=</code> parameter in the OAuth callback can also directly jump to the query results of this page.
             </p>
           </div>
         </div>
@@ -1022,14 +1040,14 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
     <section id="pricing" class="py-20 bg-white">
       <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="text-center mb-16">
-          <h2 class="text-3xl md:text-4xl font-bold text-gray-900 mb-4">方案示例</h2>
-          <p class="text-lg text-gray-600">沿用模板的展示内容，可按需替换为真实定价策略。</p>
+          <h2 class="text-3xl md:text-4xl font-bold text-gray-900 mb-4">Pricing examples</h2>
+          <p class="text-lg text-gray-600">Use the template content for reference, and replace it with the actual pricing strategy as needed.</p>
         </div>
         <div class="grid md:grid-cols-2 gap-6">
           <div class="bg-gray-50 border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
             <div class="bg-gray-100 px-8 py-6 border-b border-gray-200 text-center">
               <h3 class="text-2xl font-bold text-gray-900">Free Plan</h3>
-              <p class="text-gray-600 mt-2 text-sm">体验基础能力，适合原型验证</p>
+              <p class="text-gray-600 mt-2 text-sm">Experience basic capabilities, suitable for prototype verification</p>
             </div>
             <div class="px-8 py-10 space-y-6">
               <div class="text-center">
@@ -1037,45 +1055,45 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
                   <span class="text-5xl font-bold text-gray-900">$0</span>
                   <span class="text-xl text-gray-500">/month</span>
                 </div>
-                <p class="text-sm text-gray-500 mt-2">永久免费</p>
+                <p class="text-sm text-gray-500 mt-2">Permanent free</p>
               </div>
               <ul class="space-y-3 text-gray-700 text-sm">
                 <li class="flex items-start gap-3">
                   ${iconCheck("w-5 h-5 text-gray-900 flex-shrink-0 mt-0.5")}
-                  <span>基础 OAuth 授权流程体验</span>
+                  <span>Experience basic OAuth authorization process</span>
                 </li>
                 <li class="flex items-start gap-3">
                   ${iconCheck("w-5 h-5 text-gray-900 flex-shrink-0 mt-0.5")}
-                  <span>每月 100 次测试调用</span>
+                  <span>100 test calls per month</span>
                 </li>
                 <li class="flex items-start gap-3">
                   ${iconCheck("w-5 h-5 text-gray-900 flex-shrink-0 mt-0.5")}
-                  <span>社区支持与 FAQ 指引</span>
+                  <span>Community support and FAQ guidance</span>
                 </li>
                 <li class="flex items-start gap-3">
                   ${iconX("w-5 h-5 text-gray-300 flex-shrink-0 mt-0.5")}
-                  <span class="text-gray-500">高级数据分析</span>
+                  <span class="text-gray-500">Advanced data analysis</span>
                 </li>
                 <li class="flex items-start gap-3">
                   ${iconX("w-5 h-5 text-gray-300 flex-shrink-0 mt-0.5")}
-                  <span class="text-gray-500">团队协作能力</span>
+                  <span class="text-gray-500">Team collaboration capabilities</span>
                 </li>
               </ul>
               <a class="block text-center w-full px-6 py-3 border border-gray-300 rounded-lg font-semibold text-gray-900 hover:bg-gray-200 transition-colors">
-                立即开始
+                Start now
               </a>
             </div>
           </div>
           <div class="bg-gray-900 text-white rounded-2xl shadow-xl overflow-hidden border border-gray-800 relative">
             <div class="absolute top-0 right-0 bg-white text-gray-900 px-4 py-1 text-sm font-semibold rounded-bl-xl shadow-md">
-              推荐
+              Recommended
             </div>
             <div class="bg-black px-8 py-6 border-b border-gray-800 text-center">
               <div class="flex items-center justify-center gap-2 mb-2">
                 ${iconCrown("w-5 h-5 text-gray-300")}
                 <h3 class="text-2xl font-bold">Pro Plan</h3>
               </div>
-              <p class="text-sm text-gray-300">解锁全部高级功能</p>
+              <p class="text-sm text-gray-300">Unlock all advanced features</p>
             </div>
             <div class="px-8 py-10 space-y-6">
               <div class="text-center">
@@ -1083,24 +1101,24 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
                   <span class="text-5xl font-bold text-white">$29</span>
                   <span class="text-xl text-gray-400">/month</span>
                 </div>
-                <p class="text-sm text-gray-400 mt-2">月度订阅，可随时取消</p>
+                <p class="text-sm text-gray-400 mt-2">Monthly subscription, can be cancelled at any time</p>
               </div>
               <ul class="space-y-3 text-gray-200 text-sm">
                 <li class="flex items-start gap-3">
                   ${iconCheck("w-5 h-5 text-white flex-shrink-0 mt-0.5")}
-                  <span>无限次会话与令牌刷新</span>
+                  <span>Unlimited sessions and token refreshes</span>
                 </li>
                 <li class="flex items-start gap-3">
                   ${iconCheck("w-5 h-5 text-white flex-shrink-0 mt-0.5")}
-                  <span>实时资源服务器同步</span>
+                  <span>Real-time resource server synchronization</span>
                 </li>
                 <li class="flex items-start gap-3">
                   ${iconCheck("w-5 h-5 text-white flex-shrink-0 mt-0.5")}
-                  <span>专属支持与监控告警</span>
+                  <span>Exclusive support and monitoring alerts</span>
                 </li>
               </ul>
               <a class="block text-center w-full px-6 py-3 bg-white text-gray-900 rounded-lg font-semibold hover:bg-gray-100 transition-colors">
-                升级体验
+                Upgrade experience
               </a>
             </div>
           </div>
@@ -1113,10 +1131,10 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
     <footer class="bg-black text-white py-12">
       <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-4">
         <p class="text-gray-400 text-sm">
-          © ${new Date().getFullYear()} Auth Server Demo. All rights reserved.
+          © ${new Date().getFullYear()} Auth Server. All rights reserved.
         </p>
         <p class="text-sm text-gray-500">
-          如需支持，请联系 <a href="${escapeHtml(
+          If you need support, please contact <a href="${escapeHtml(
             contactLink
           )}" class="text-white font-semibold hover:text-gray-300 transition-colors">${escapeHtml(
     contactLink.replace(/^mailto:/, "")
@@ -1137,6 +1155,7 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
           : null,
         autoOpenFirebase: shouldAutoOpenFirebase,
         currentUserEmail: currentUserEmail ?? null,
+        resumeAuth: options.authResume ?? null,
       })};</script>`
     : "";
 
@@ -1145,7 +1164,7 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
   const headerAction = currentUserEmail
     ? `
         <div class="flex items-center gap-3 text-sm text-gray-600">
-          <span>已登录：<span class="font-semibold text-gray-900">${escapeHtml(
+          <span>Logged in: <span class="font-semibold text-gray-900">${escapeHtml(
             currentUserEmail
           )}</span></span>
           <button
@@ -1153,7 +1172,7 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
             data-firebase-modal-trigger
             class="inline-flex items-center px-3 py-1.5 border border-gray-300 rounded-md hover:bg-gray-100 transition-colors"
           >
-            切换账号
+            Switch account
           </button>
         </div>
       `
@@ -1163,13 +1182,13 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
           data-firebase-modal-trigger
           class="inline-flex items-center px-4 py-2 text-sm font-semibold border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors"
         >
-          登录体验
+          Sign in experience
         </button>
       `;
 
   return `
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -1412,6 +1431,11 @@ const authorizePostSchema = authorizationQuerySchema.extend({
   decision: z.enum(["approve", "deny"]).optional(),
 });
 
+const firebaseSessionRequestSchema = z.object({
+  idToken: z.string().min(1, "idToken cannot be empty"),
+  resume: authorizationQuerySchema.optional(),
+});
+
 const registrationSchema = z.object({
   redirect_uris: z.array(z.string().url()).min(1),
   client_name: z.string().optional(),
@@ -1478,29 +1502,30 @@ app.get("/", async (req, res) => {
 
   let pendingAuthSummary: AppOverviewOptions["pendingAuth"];
   let shouldAutoOpenFirebase = !currentUserEmail;
+  let authResumePayload: AuthResumePayload | undefined;
 
   if (clientId) {
     try {
       const clientRecord = await findClientById(clientId);
       if (!clientRecord) {
-        overviewOptions.error = `没有找到 client_id 为 ${clientId} 的客户端。`;
+        overviewOptions.error = `No client record found for client_id ${clientId}.`;
       } else {
         overviewOptions.client = clientRecord;
         try {
           const appRecord = await findAppByUuid(clientRecord.app_uuid);
           if (!appRecord) {
-            overviewOptions.error = "未找到该客户端关联的应用。";
+            overviewOptions.error = "No application record found for the client.";
           } else {
             overviewOptions.app = appRecord;
           }
         } catch (error) {
           console.error("Failed to load app by uuid", error);
-          overviewOptions.error = "加载应用信息时出现问题，请稍后再试。";
+          overviewOptions.error = "Failed to load app information, please try again later.";
         }
       }
     } catch (error) {
       console.error("Failed to load client by id", error);
-      overviewOptions.error = "加载客户端信息时出现问题，请稍后再试。";
+      overviewOptions.error = "Failed to load client information, please try again later.";
     }
   }
 
@@ -1515,10 +1540,23 @@ app.get("/", async (req, res) => {
       redirectUri: authRequest.redirect_uri,
       scopes: authRequest.scope,
     };
+    authResumePayload = {
+      response_type: authRequest.response_type,
+      client_id: authRequest.client_id,
+      redirect_uri: authRequest.redirect_uri,
+      scope: authRequest.scope.join(" "),
+      state: authRequest.state,
+      code_challenge: authRequest.code_challenge,
+      code_challenge_method: authRequest.code_challenge_method,
+      resource: authRequest.resource,
+    };
   }
 
   if (pendingAuthSummary) {
     overviewOptions.pendingAuth = pendingAuthSummary;
+  }
+  if (authResumePayload) {
+    overviewOptions.authResume = authResumePayload;
   }
   overviewOptions.autoOpenFirebase = shouldAutoOpenFirebase;
   if (currentUserEmail) {
@@ -1615,22 +1653,20 @@ app.post("/auth/firebase/session", async (req, res) => {
   if (!CONFIG.firebaseClientConfig?.apiKey) {
     return res.status(503).json({
       ok: false,
-      error: "Firebase 尚未配置，无法使用弹窗登录。",
+      error: "Firebase is not configured, cannot use popup login.",
     });
   }
-  const schema = z.object({
-    idToken: z.string().min(1, "idToken 不能为空"),
-  });
-  const parsed = schema.safeParse(req.body);
+  const parsed = firebaseSessionRequestSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({
       ok: false,
-      error: "请求参数无效，缺少 idToken。",
+      error: "Invalid request parameters, missing idToken.",
     });
   }
 
   try {
-    const account = await verifyFirebaseIdToken(parsed.data.idToken);
+    const { idToken, resume } = parsed.data;
+    const account = await verifyFirebaseIdToken(idToken);
     const email = account.email.toLowerCase();
     let user = await findUserByEmail(email);
     if (!user) {
@@ -1643,12 +1679,23 @@ app.post("/auth/firebase/session", async (req, res) => {
     }
     req.session.userUuid = user.uuid;
 
-    if (req.session.authRequest) {
+    if (!req.session.authRequest && resume) {
+      try {
+        const { authRequest } = await prepareAuthorizationDetails(resume);
+        req.session.authRequest = authRequest;
+      } catch (error) {
+        console.warn("Failed to resume authorization request from Firebase payload", error);
+      }
+    }
+
+    const activeAuthRequest = req.session.authRequest;
+
+    if (activeAuthRequest) {
       try {
         const redirectUrl = await completeAuthorizationRequest(
           req,
           user.uuid,
-          req.session.authRequest
+          activeAuthRequest
         );
         return res.json({ ok: true, redirect: redirectUrl });
       } catch (error) {
@@ -1658,7 +1705,7 @@ app.post("/auth/firebase/session", async (req, res) => {
         );
         return res.status(500).json({
           ok: false,
-          error: "生成授权码时出现问题，请稍后再试。",
+          error: "Failed to issue authorization code, please try again later.",
         });
       }
     }
@@ -1669,7 +1716,7 @@ app.post("/auth/firebase/session", async (req, res) => {
       console.error("Failed to persist session after Firebase login", error);
       return res
         .status(500)
-        .json({ ok: false, error: "无法保存会话，请稍后重试。" });
+        .json({ ok: false, error: "Failed to persist session, please try again later." });
     }
 
     return res.json({ ok: true });
@@ -1680,7 +1727,7 @@ app.post("/auth/firebase/session", async (req, res) => {
       error:
         error instanceof Error
           ? error.message
-          : "Firebase 登录验证失败，请稍后再试。",
+          : "Firebase login verification failed, please try again later.",
     });
   }
 });
@@ -1726,7 +1773,7 @@ app.get("/oauth/authorize", async (req, res) => {
       return res.status(500).send(
         renderPage(
           "Server error",
-          `<p class="danger">无法保存授权会话，请稍后重试。</p>`
+          `<p class="danger">Failed to persist authorization session, please try again later.</p>`
         )
       );
     }
