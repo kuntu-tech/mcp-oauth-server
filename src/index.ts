@@ -2104,6 +2104,7 @@ app.post("/oauth/token", async (req, res) => {
 });
 
 app.post("/oauth/register", async (req, res) => {
+  console.log("raw registration payload", req.body);
   const parsed = registrationSchema.safeParse(req.body);
   if (!parsed.success) {
     return res
