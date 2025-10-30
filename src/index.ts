@@ -2122,9 +2122,11 @@ app.post("/oauth/register", async (req, res) => {
       });
     }
   } else {
-    const apps = await listApps();
-    if (apps.length === 1) {
-      appRecord = apps[0];
+    const configuredApps = (await listApps()).filter((app) =>
+      Boolean(app.resource_uri?.trim())
+    );
+    if (configuredApps.length === 1) {
+      appRecord = configuredApps[0];
     } else {
       return res.status(400).json({
         error: "invalid_target",
