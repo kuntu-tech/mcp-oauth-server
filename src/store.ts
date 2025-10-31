@@ -13,6 +13,7 @@ type AppRow = {
   config?: string | null;
   status?: string | null;
   mcp_server_ids?: string[] | string | null;
+  app_meta_info?: unknown;
   created_at?: string | null;
   updated_at?: string | null;
 };
@@ -121,7 +122,26 @@ export interface App {
   default_scopes: string;
   status?: string | null;
   config: AppConfig;
+  meta_info?: AppMetaInfo;
 }
+
+export type AppMetaInfo = {
+  run_id?: string;
+  task_id?: string;
+  chatAppMeta?: {
+    name?: string;
+    tagline?: string;
+    description?: string;
+    coreFeatures?: Array<{
+      title?: string;
+      summary?: string;
+    }>;
+    highlightedQuestions?: Array<{
+      question?: string;
+      simulatedAnswer?: string;
+    }>;
+  };
+};
 
 export interface Client {
   client_id: string;
@@ -469,6 +489,7 @@ const appRowToApp = (row?: AppRow | null): App | undefined => {
   const resourceUri = resourceFromConfig(config) ?? "";
   const defaultScopes = defaultScopesFromConfig(config);
   const mcpServerIds = normalizeStringArray(row.mcp_server_ids);
+  const metaInfo = parseAppMetaInfo(row.app_meta_info);
   return {
     id: row.id,
     uuid: row.id,
@@ -478,6 +499,7 @@ const appRowToApp = (row?: AppRow | null): App | undefined => {
     default_scopes: canonicalizeScopes(defaultScopes).join(" "),
     status: row.status ?? undefined,
     config,
+    meta_info: metaInfo,
   };
 };
 
@@ -545,10 +567,34 @@ const normalizeResource = (value: string): string =>
     ? value.replace(/\/+$/, "")
     : value;
 
+const parseAppMetaInfo = (value: unknown): AppMetaInfo | undefined => {
+  if (!value) {
+    return undefined;
+  }
+  let resolved: unknown = value;
+  if (typeof value === "string") {
+    try {
+      resolved = JSON.parse(value);
+    } catch (error) {
+      console.warn("Failed to parse app_meta_info JSON", error);
+      return undefined;
+    }
+  }
+  if (typeof resolved !== "object" || resolved === null) {
+    return undefined;
+  }
+  try {
+    return JSON.parse(JSON.stringify(resolved)) as AppMetaInfo;
+  } catch (error) {
+    console.warn("Failed to sanitize app_meta_info payload", error);
+    return undefined;
+  }
+};
+
 const fetchAllApps = async (): Promise<App[]> => {
   const { data, error } = await supabase
     .from("apps")
-    .select("id,name,config,status,mcp_server_ids,created_at,updated_at");
+    .select("id,name,config,status,mcp_server_ids,app_meta_info,created_at,updated_at");
   if (error) {
     throw new Error(`Failed to fetch apps: ${error.message}`);
   }
@@ -669,7 +715,7 @@ export const findAppByResource = async (
 export const findAppByUuid = async (uuid: string): Promise<App | undefined> => {
   const { data, error } = await supabase
     .from("apps")
-    .select("id,name,config,status,created_at,updated_at")
+    .select("id,name,config,status,mcp_server_ids,app_meta_info,created_at,updated_at")
     .eq("id", uuid)
     .maybeSingle();
   if (error) {

@@ -26,7 +26,7 @@ import {
   listApps,
   canonicalizeScopes,
 } from "./store";
-import type { App, Client } from "./store";
+import type { App, Client, AppMetaInfo } from "./store";
 import { initializeKeys, getJwks } from "./keyManager";
 import {
   issueAccessToken,
@@ -145,6 +145,120 @@ type AuthResumePayload = {
   code_challenge: string;
   code_challenge_method: "S256";
   resource: string;
+};
+
+type LandingPageContent = {
+  app: {
+    name: string;
+    description: string;
+    tagline?: string;
+  };
+  features: Array<{
+    title: string;
+    description: string;
+  }>;
+  howItWorks: Array<{
+    question: string;
+    answer: string;
+  }>;
+};
+
+const trimOrUndefined = (value?: string): string | undefined => {
+  if (!value) {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+};
+
+const defaultAppName = "Smart App Name";
+const defaultAppDescription =
+  "One sentence introducing your app's core value, helping users quickly understand the product advantages";
+
+const defaultFeatureCards: Array<{ title: string; description: string }> = [
+  {
+    title: "Smart Analysis",
+    description:
+      "Based on advanced AI technology, providing deep insights and intelligent recommendations",
+  },
+  {
+    title: "Fast Response",
+    description:
+      "Millisecond-level response speed, instantly getting the information and answers you need",
+  },
+  {
+    title: "Secure & Reliable",
+    description:
+      "Enterprise-level security protection, safeguarding your data privacy and information security",
+  },
+  {
+    title: "Continuous Optimization",
+    description:
+      "Continuously learning and improving, providing increasingly accurate service experience",
+  },
+];
+
+const defaultHowItWorksEntries: Array<{ question: string; answer: string }> = [
+  {
+    question: "How do I start using Smart App Name?",
+    answer:
+      "Sign in with your preferred identity provider, connect the data sources you care about, and pick the goals you want to track.",
+  },
+  {
+    question: "What happens after I connect my data?",
+    answer:
+      "Smart App Name ingests your information in real time, highlights the most important trends, and prepares ready-to-share insights and action plans.",
+  },
+  {
+    question: "How does Smart App Name keep recommendations fresh?",
+    answer:
+      "The assistant continuously learns from new activity and your feedback, automatically tuning future suggestions to stay aligned with your objectives.",
+  },
+];
+
+const deriveLandingPageContent = (
+  metaInfo?: AppMetaInfo
+): LandingPageContent => {
+  const chatMeta = metaInfo?.chatAppMeta;
+  const appName = trimOrUndefined(chatMeta?.name) ?? defaultAppName;
+  const appDescription =
+    trimOrUndefined(chatMeta?.description) ?? defaultAppDescription;
+  const appTagline = trimOrUndefined(chatMeta?.tagline);
+
+  const features =
+    chatMeta?.coreFeatures?.reduce<
+      Array<{ title: string; description: string }>
+    >((acc, feature) => {
+      const title = trimOrUndefined(feature.title);
+      const summary = trimOrUndefined(feature.summary);
+      if (title && summary) {
+        acc.push({ title, description: summary });
+      }
+      return acc;
+    }, []) ?? [];
+
+  const howItWorks =
+    chatMeta?.highlightedQuestions?.reduce<
+      Array<{ question: string; answer: string }>
+    >((acc, item) => {
+      const question = trimOrUndefined(item.question);
+      const answer = trimOrUndefined(item.simulatedAnswer);
+      if (question && answer) {
+        acc.push({ question, answer });
+      }
+      return acc;
+    }, []) ?? [];
+
+  return {
+    app: {
+      name: appName,
+      description: appDescription,
+      tagline: appTagline,
+    },
+    features: features.length > 0 ? features : defaultFeatureCards,
+    howItWorks:
+      howItWorks.length > 0 ? howItWorks : defaultHowItWorksEntries,
+  };
 };
 
 const normalizeResourceValue = (value: string): string =>
@@ -502,54 +616,57 @@ const buildFirebaseUiSnippet = (mode: FirebaseUiMode = "auth"): string => {
           providerIds.push(firebase.auth.EmailAuthProvider.PROVIDER_ID);
         }
 
+        const processAuthResult = async (authResult) => {
+          const email =
+            authResult?.user?.email || authResult?.user?.uid || "";
+          setStatus("loading", "Firebase " + authModeLabel + " successful: " + email + ", verifying...");
+          try {
+            const idToken = await authResult.user.getIdToken();
+            const requestPayload = { idToken };
+            if (resumeAuth) {
+              requestPayload.resume = resumeAuth;
+            }
+            const response = await fetch("/auth/firebase/session", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify(requestPayload),
+              credentials: "same-origin",
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok || !payload?.ok) {
+              const message =
+                payload?.error ||
+                payload?.message ||
+                "Server failed to complete login verification.";
+              throw new Error(message);
+            }
+            setStatus("success", "Login successful, redirecting...");
+            if (payload.redirect) {
+              window.location.assign(payload.redirect);
+            } else if (authState?.pendingAuth) {
+              window.location.assign("/oauth/authorize");
+            } else {
+              setTimeout(() => hideModal(), 800);
+            }
+          } catch (err) {
+            console.error("Firebase login verification failed", err);
+            setStatus(
+              "error",
+              "Firebase login verification failed: " + (err?.message || "Unknown error")
+            );
+          }
+        };
+
         const uiConfig = {
           signInFlow: "popup",
           signInOptions: providerIds,
           tosUrl: "${CONFIG.docsUrl}",
           privacyPolicyUrl: "${CONFIG.privacyPolicyUrl}",
           callbacks: {
-            signInSuccessWithAuthResult: async function (authResult) {
-              const email =
-                authResult?.user?.email || authResult?.user?.uid || "";
-              setStatus("loading", "Firebase " + authModeLabel + " successful: " + email + ", verifying...");
-              try {
-                const idToken = await authResult.user.getIdToken();
-                const requestPayload = { idToken };
-                if (resumeAuth) {
-                  requestPayload.resume = resumeAuth;
-                }
-                const response = await fetch("/auth/firebase/session", {
-                  method: "POST",
-                  headers: {
-                    "Content-Type": "application/json",
-                  },
-                  body: JSON.stringify(requestPayload),
-                  credentials: "same-origin",
-                });
-                const payload = await response.json().catch(() => ({}));
-                if (!response.ok || !payload?.ok) {
-                  const message =
-                    payload?.error ||
-                    payload?.message ||
-                    "Server failed to complete login verification.";
-                  throw new Error(message);
-                }
-                setStatus("success", "Login successful, redirecting...");
-                console.log("payload", payload);
-                if (payload.redirect) {
-                  window.location.assign(payload.redirect);
-                } else if (authState?.pendingAuth) {
-                  window.location.assign("/oauth/authorize");
-                } else {
-                  setTimeout(() => hideModal(), 800);
-                }
-              } catch (err) {
-                console.error("Firebase login verification failed", err);
-                setStatus(
-                  "error",
-                  "Firebase login verification failed: " + (err?.message || "Unknown error")
-                );
-              }
+            signInSuccessWithAuthResult: function (authResult) {
+              processAuthResult(authResult);
               return false;
             },
             signInFailure: function (error) {
@@ -836,76 +953,69 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
     CONFIG.adminContact && CONFIG.adminContact.trim().length > 0
       ? CONFIG.adminContact
       : "mailto:admin@example.com";
-  const heroTitle = "Smart App Name";
-  const heroSubtitle =
-    "One sentence introducing your app's core value, helping users quickly understand the product advantages";
+  const landingPageContent = deriveLandingPageContent(options.app?.meta_info);
+  const appName =
+    landingPageContent.app.name && landingPageContent.app.name.trim().length > 0
+      ? landingPageContent.app.name.trim()
+      : "Smart App Name";
+  const heroTitle = appName;
+  const heroTagline =
+    landingPageContent.app.tagline &&
+    landingPageContent.app.tagline.trim().length > 0
+      ? landingPageContent.app.tagline.trim()
+      : undefined;
+  const heroSubtitle = heroTagline ?? landingPageContent.app.description;
+  const heroSubtitleClass = heroTagline
+    ? "text-lg md:text-2xl text-gray-600 mb-4 leading-relaxed"
+    : "text-lg md:text-2xl text-gray-600 mb-8 leading-relaxed";
+  const heroDescriptionParagraph = heroTagline
+    ? `<p class="text-base md:text-lg text-gray-600 mb-8 leading-relaxed">${escapeHtml(
+        landingPageContent.app.description
+      )}</p>`
+    : "";
+  const appInitial = appName.charAt(0).toUpperCase() || "S";
 
-  const features = [
-    {
-      icon: iconSparkles(),
-      title: "Smart Analysis",
-      description:
-        "Based on advanced AI technology, providing deep insights and intelligent recommendations",
-    },
-    {
-      icon: iconZap(),
-      title: "Fast Response",
-      description:
-        "Millisecond-level response speed, instantly getting the information and answers you need",
-    },
-    {
-      icon: iconShield(),
-      title: "Secure & Reliable",
-      description:
-        "Enterprise-level security protection, safeguarding your data privacy and information security",
-    },
-    {
-      icon: iconTrendingUp(),
-      title: "Continuous Optimization",
-      description:
-        "Continuously learning and improving, providing increasingly accurate service experience",
-    },
+  const defaultFeatureIcons: Array<(className?: string) => string> = [
+    iconSparkles,
+    iconZap,
+    iconShield,
+    iconTrendingUp,
   ];
 
-  const featuresHtml = features
-    .map(
-      (feature) => `
+  const featuresHtml = landingPageContent.features
+    .map((feature, index) => {
+      const iconRenderer =
+        defaultFeatureIcons[index % defaultFeatureIcons.length];
+      return `
         <div class="p-6 bg-white/70 backdrop-blur-sm border border-slate-200 rounded-2xl shadow-sm hover:shadow-lg transition-shadow">
           <div class="w-12 h-12 bg-gray-900 text-white rounded-xl flex items-center justify-center mb-4">
-            ${feature.icon}
+            ${iconRenderer()}
           </div>
           <h3 class="text-xl font-semibold text-gray-900 mb-2">${escapeHtml(feature.title)}</h3>
           <p class="text-gray-600 text-sm md:text-base leading-relaxed">${escapeHtml(feature.description)}</p>
         </div>
-      `
-    )
+      `;
+    })
     .join("");
 
-  const conversations = [
-    {
-      type: "user" as const,
-      message: "How can I quickly improve work efficiency?",
-    },
-    {
-      type: "bot" as const,
-      message:
-        "Based on your needs, I suggest focusing on three key areas: 1. Use time management tools to plan daily tasks; 2. Adopt the Pomodoro technique to maintain focus; 3. Regularly review and optimize workflows. I can create a detailed implementation plan for you.",
-    },
-    {
-      type: "user" as const,
-      message: "Can you help me analyze current data trends?",
-    },
-    {
-      type: "bot" as const,
-      message:
-        "Of course! Through analyzing your data, I found these key trends: overall growth rate of 23%, with mobile traffic growing fastest at 45%. I recommend focusing on optimizing mobile user experience, which could bring an additional 30% conversion improvement.",
-    },
-  ];
+  const conversationEntries = landingPageContent.howItWorks.flatMap((item) => {
+    const question = trimOrUndefined(item.question);
+    const answer = trimOrUndefined(item.answer);
+    const entries: Array<{ type: "user" | "bot"; message: string }> = [];
+    if (question) {
+      entries.push({ type: "user", message: question });
+    }
+    if (answer) {
+      entries.push({ type: "bot", message: answer });
+    }
+    return entries;
+  });
 
-  const conversationHtml = conversations
-    .map((conv) => {
-      const isUser = conv.type === "user";
+  const howItWorksHtml = conversationEntries
+    .map((entry) => {
+      const isUser = entry.type === "user";
       const alignmentClass = isUser ? "justify-end" : "justify-start";
+      const rowDirection = isUser ? "flex-row-reverse" : "";
       const bubbleClass = isUser
         ? "bg-gray-900 text-white shadow-lg border border-gray-800"
         : "bg-white text-gray-800 shadow-lg border border-gray-200";
@@ -915,12 +1025,12 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
         : iconBot("w-5 h-5 text-white");
       return `
         <div class="flex ${alignmentClass}">
-          <div class="flex items-start gap-3 max-w-2xl ${isUser ? "flex-row-reverse" : ""}">
+          <div class="flex items-start gap-3 max-w-2xl ${rowDirection}">
             <div class="w-10 h-10 ${iconWrapperClass} rounded-full flex items-center justify-center shadow-md">
               ${icon}
             </div>
             <div class="px-6 py-4 rounded-2xl ${bubbleClass}">
-              <p class="text-sm md:text-base leading-relaxed">${escapeHtml(conv.message)}</p>
+              <p class="text-sm md:text-base leading-relaxed">${escapeHtml(entry.message)}</p>
             </div>
           </div>
         </div>
@@ -1049,41 +1159,6 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
 
   const clientDetailsBlock = pendingAuthSummary + clientDetails;
 
-  const firebaseSection = `
-    <section id="firebase-auth" class="py-20 bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 text-white">
-      <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="grid md:grid-cols-2 gap-12 items-center">
-          <div>
-            <h2 class="text-3xl md:text-4xl font-bold mb-4">Firebase Sign in / Sign up</h2>
-            <p class="text-slate-300 leading-relaxed mb-6">
-              ${
-                hasFirebase
-                  ? "The Firebase login window will automatically pop up after page load; you can use the button below to reopen it at any time."
-                  : "The Firebase configuration is missing, cannot display the FirebaseUI component. Please complete the environment variables and try again."
-              }
-            </p>
-            <ul class="space-y-2 text-sm text-slate-300">
-              <li>• Supports multiple Firebase providers (Email, Google, GitHub, etc.).</li>
-              <li>• After successful login, the authorization process will continue automatically and redirect back to the client.</li>
-              <li>• If you need to customize the callback, you can adjust it in <code class="bg-white/10 rounded px-1.5 py-0.5">config.ts</code>.</li>
-            </ul>
-          </div>
-          <div class="bg-white text-gray-900 rounded-2xl shadow-2xl p-6 md:p-8 space-y-4">
-            <p class="text-sm text-slate-600">
-              After ready, click the button below to reopen the Firebase login window to switch accounts or re-verify.
-            </p>
-            <button
-              type="button"
-              data-firebase-modal-trigger
-              class="inline-flex items-center justify-center w-full px-5 py-3 bg-gray-900 text-white rounded-lg font-semibold hover:bg-black transition-colors"
-            >
-              Open Firebase login window
-            </button>
-          </div>
-        </div>
-      </div>
-    </section>
-  `;
 
   const firebaseModal = hasFirebase
     ? `
@@ -1100,8 +1175,8 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
           <div class="bg-white rounded-2xl shadow-2xl overflow-hidden">
             <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200">
               <div>
-                <p class="text-sm font-semibold text-indigo-600">Firebase Sign in</p>
-                <h3 class="text-lg font-bold text-gray-900 mt-1">Use Firebase Sign in</h3>
+                <p class="text-sm font-semibold text-indigo-600">${escapeHtml(appName)}</p>
+                <h3 class="text-lg font-bold text-gray-900 mt-1">Use ${escapeHtml(appName)} Sign In</h3>
               </div>
               <button
                 id="close-firebase-modal"
@@ -1133,9 +1208,10 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
           <h1 class="text-4xl md:text-6xl font-bold text-gray-900 mb-6 leading-tight">
             ${escapeHtml(heroTitle)}
           </h1>
-          <p class="text-lg md:text-2xl text-gray-600 mb-8 leading-relaxed">
+          <p class="${heroSubtitleClass}">
             ${escapeHtml(heroSubtitle)}
           </p>
+          ${heroDescriptionParagraph}
           <div class="flex flex-col sm:flex-row sm:items-center gap-4">
             <a href="${escapeHtml(
               docsUrl
@@ -1172,7 +1248,7 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
           <h2 class="text-3xl md:text-4xl font-bold text-gray-900 mb-4">How It Works</h2>
         </div>
         <div class="space-y-6">
-          ${conversationHtml}
+          ${howItWorksHtml}
         </div>
       </div>
     </section>
@@ -1209,97 +1285,6 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
             <p class="mt-6 text-xs text-slate-400 leading-relaxed">
               Tip: The <code class="bg-white/10 px-1.5 py-0.5 rounded text-white">?client_id=</code> parameter in the OAuth callback can also directly jump to the query results of this page.
             </p>
-          </div>
-        </div>
-      </div>
-    </section>
-  `;
-
-  const pricingSection = `
-    <section id="pricing" class="py-20 bg-white">
-      <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="text-center mb-16">
-          <h2 class="text-3xl md:text-4xl font-bold text-gray-900 mb-4">Pricing examples</h2>
-          <p class="text-lg text-gray-600">Use the template content for reference, and replace it with the actual pricing strategy as needed.</p>
-        </div>
-        <div class="grid md:grid-cols-2 gap-6">
-          <div class="bg-gray-50 border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
-            <div class="bg-gray-100 px-8 py-6 border-b border-gray-200 text-center">
-              <h3 class="text-2xl font-bold text-gray-900">Free Plan</h3>
-              <p class="text-gray-600 mt-2 text-sm">Experience basic capabilities, suitable for prototype verification</p>
-            </div>
-            <div class="px-8 py-10 space-y-6">
-              <div class="text-center">
-                <div class="flex items-baseline justify-center gap-2">
-                  <span class="text-5xl font-bold text-gray-900">$0</span>
-                  <span class="text-xl text-gray-500">/month</span>
-                </div>
-                <p class="text-sm text-gray-500 mt-2">Permanent free</p>
-              </div>
-              <ul class="space-y-3 text-gray-700 text-sm">
-                <li class="flex items-start gap-3">
-                  ${iconCheck("w-5 h-5 text-gray-900 flex-shrink-0 mt-0.5")}
-                  <span>Experience basic OAuth authorization process</span>
-                </li>
-                <li class="flex items-start gap-3">
-                  ${iconCheck("w-5 h-5 text-gray-900 flex-shrink-0 mt-0.5")}
-                  <span>100 test calls per month</span>
-                </li>
-                <li class="flex items-start gap-3">
-                  ${iconCheck("w-5 h-5 text-gray-900 flex-shrink-0 mt-0.5")}
-                  <span>Community support and FAQ guidance</span>
-                </li>
-                <li class="flex items-start gap-3">
-                  ${iconX("w-5 h-5 text-gray-300 flex-shrink-0 mt-0.5")}
-                  <span class="text-gray-500">Advanced data analysis</span>
-                </li>
-                <li class="flex items-start gap-3">
-                  ${iconX("w-5 h-5 text-gray-300 flex-shrink-0 mt-0.5")}
-                  <span class="text-gray-500">Team collaboration capabilities</span>
-                </li>
-              </ul>
-              <a class="block text-center w-full px-6 py-3 border border-gray-300 rounded-lg font-semibold text-gray-900 hover:bg-gray-200 transition-colors">
-                Start now
-              </a>
-            </div>
-          </div>
-          <div class="bg-gray-900 text-white rounded-2xl shadow-xl overflow-hidden border border-gray-800 relative">
-            <div class="absolute top-0 right-0 bg-white text-gray-900 px-4 py-1 text-sm font-semibold rounded-bl-xl shadow-md">
-              Recommended
-            </div>
-            <div class="bg-black px-8 py-6 border-b border-gray-800 text-center">
-              <div class="flex items-center justify-center gap-2 mb-2">
-                ${iconCrown("w-5 h-5 text-gray-300")}
-                <h3 class="text-2xl font-bold">Pro Plan</h3>
-              </div>
-              <p class="text-sm text-gray-300">Unlock all advanced features</p>
-            </div>
-            <div class="px-8 py-10 space-y-6">
-              <div class="text-center">
-                <div class="flex items-baseline justify-center gap-2">
-                  <span class="text-5xl font-bold text-white">$29</span>
-                  <span class="text-xl text-gray-400">/month</span>
-                </div>
-                <p class="text-sm text-gray-400 mt-2">Monthly subscription, can be cancelled at any time</p>
-              </div>
-              <ul class="space-y-3 text-gray-200 text-sm">
-                <li class="flex items-start gap-3">
-                  ${iconCheck("w-5 h-5 text-white flex-shrink-0 mt-0.5")}
-                  <span>Unlimited sessions and token refreshes</span>
-                </li>
-                <li class="flex items-start gap-3">
-                  ${iconCheck("w-5 h-5 text-white flex-shrink-0 mt-0.5")}
-                  <span>Real-time resource server synchronization</span>
-                </li>
-                <li class="flex items-start gap-3">
-                  ${iconCheck("w-5 h-5 text-white flex-shrink-0 mt-0.5")}
-                  <span>Exclusive support and monitoring alerts</span>
-                </li>
-              </ul>
-              <a class="block text-center w-full px-6 py-3 bg-white text-gray-900 rounded-lg font-semibold hover:bg-gray-100 transition-colors">
-                Upgrade experience
-              </a>
-            </div>
           </div>
         </div>
       </div>
@@ -1397,10 +1382,12 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
       <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex items-center justify-between py-4">
           <a href="/" class="flex items-center gap-3">
-            <span class="w-10 h-10 rounded-xl bg-gray-900 text-white flex items-center justify-center font-bold shadow-md">D</span>
-            <span class="text-lg font-semibold text-gray-900">App Name</span>
+            <span class="w-10 h-10 rounded-xl bg-gray-900 text-white flex items-center justify-center font-bold shadow-md">${escapeHtml(appInitial)}</span>
+            <span class="text-lg font-semibold text-gray-900">${escapeHtml(appName)}</span>
           </a>
-         
+          <div class="flex items-center gap-4">
+            ${headerAction}
+          </div>
         </div>
       </div>
     </header>
@@ -1408,9 +1395,6 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
       ${heroSection}
       ${featureSection}
       ${howItWorksSection}
-      ${clientOverviewSection}
-      ${firebaseSection}
-      ${pricingSection}
     </main>
     ${footerSection}
     ${firebaseModal}
@@ -1649,6 +1633,24 @@ const tokenRequestSchema = z.discriminatedUnion("grant_type", [
   }),
 ]);
 
+const previewTokenRequestSchema = z
+  .object({
+    client_id: z.string().min(1, "client_id is required"),
+    user_uuid: z.string().uuid().optional(),
+    email: z.string().email().optional(),
+    sub: z.string().min(1).optional(),
+    resource: z.string().url().optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (!value.user_uuid && !value.email && !value.sub) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Provide user_uuid, email, or sub to populate the token subject.",
+        path: ["user_uuid"],
+      });
+    }
+  });
+
 app.get("/", async (req, res) => {
   const clientIdParam = req.query.client_id;
   let clientId =
@@ -1706,6 +1708,18 @@ app.get("/", async (req, res) => {
     } catch (error) {
       console.error("Failed to load client by id", error);
       overviewOptions.error = "Failed to load client information, please try again later.";
+    }
+  }
+
+  if (!overviewOptions.app) {
+    try {
+      const apps = await listApps();
+      const defaultAppRecord = selectDefaultApp(apps) ?? apps[0];
+      if (defaultAppRecord) {
+        overviewOptions.app = defaultAppRecord;
+      }
+    } catch (error) {
+      console.error("Failed to load apps for landing page content", error);
     }
   }
 
@@ -2091,6 +2105,101 @@ app.post("/oauth/authorize", async (req, res) => {
           `<p class="danger">An unexpected error occurred.</p>`
         )
       );
+  }
+});
+
+app.post("/oauth/preview-token", async (req, res) => {
+  const parsed = previewTokenRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({
+      error: "invalid_request",
+      error_description: "Malformed preview token request.",
+      details: parsed.error.flatten(),
+    });
+  }
+
+  const { client_id, user_uuid, email, sub, resource } = parsed.data;
+  const normalizedEmail = email?.toLowerCase();
+  logHttpEvent("POST", req.originalUrl, "request", {
+    clientId: client_id,
+    userUuid: user_uuid,
+    hasEmail: Boolean(normalizedEmail),
+    hasSub: Boolean(sub),
+  });
+
+  const client = await findClientById(client_id);
+  if (!client) {
+    return res.status(400).json({
+      error: "invalid_client",
+      error_description: "Unknown client_id.",
+    });
+  }
+
+  let subject = sub;
+  let emailClaim = normalizedEmail;
+
+  if (user_uuid) {
+    const user = await findUserByUuid(user_uuid);
+    if (!user) {
+      return res.status(404).json({
+        error: "invalid_user",
+        error_description: "User not found for the provided user_uuid.",
+      });
+    }
+    subject = user.uuid;
+    emailClaim = user.email;
+  } else if (normalizedEmail) {
+    const existing = await findUserByEmail(normalizedEmail);
+    if (existing) {
+      subject = existing.uuid;
+      emailClaim = existing.email;
+    }
+  }
+
+  if (!subject) {
+    subject = "preview-user";
+  }
+
+  const appRecord = await findAppByUuid(client.app_uuid);
+  if (!appRecord) {
+    return res.status(500).json({
+      error: "server_error",
+      error_description: "Associated app configuration is unavailable.",
+    });
+  }
+
+  const resolvedResource =
+    resource?.trim() ||
+    appRecord.resource_uri?.trim() ||
+    appRecord.mcp_server_ids
+      .map((value) => value.trim())
+      .find((value) => value) ||
+    CONFIG.issuer;
+
+  const scope = "openid profile email apps.read";
+  try {
+    const { token, expiresAt } = await issueAccessToken(
+      subject,
+      client.client_id,
+      resolvedResource,
+      scope,
+      emailClaim
+    );
+    const now = Math.floor(Date.now() / 1000);
+    const expiresIn = Math.max(0, expiresAt - now);
+    return res.json({
+      access_token: token,
+      token_type: "Bearer",
+      expires_in: expiresIn,
+      scope,
+      resource: resolvedResource,
+    });
+  } catch (error) {
+    console.error("Failed to issue preview token", error);
+    return res.status(500).json({
+      error: "server_error",
+      error_description: "Unable to issue preview token.",
+    });
   }
 });
 
