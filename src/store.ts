@@ -12,6 +12,7 @@ type AppRow = {
   name: string;
   config?: string | null;
   status?: string | null;
+  mcp_server_ids?: string[] | string | null;
   created_at?: string | null;
   updated_at?: string | null;
 };
@@ -116,6 +117,7 @@ export interface App {
   uuid: string;
   name: string;
   resource_uri: string;
+  mcp_server_ids: string[];
   default_scopes: string;
   status?: string | null;
   config: AppConfig;
@@ -190,6 +192,17 @@ const normalizeScopeInput = (value: unknown): string[] => {
   return [];
 };
 
+export const canonicalizeScopes = (scopes: string[]): string[] => {
+  const unique = Array.from(
+    new Set(scopes.map((scope) => scope.trim()).filter(Boolean))
+  );
+  return unique.sort((a, b) => a.localeCompare(b));
+};
+
+export const canonicalScopeString = (value: unknown): string => {
+  return canonicalizeScopes(normalizeScopeInput(value)).join(" ");
+};
+
 const parseAppConfig = (config?: string | null): AppConfig => {
   if (!config) {
     return {};
@@ -218,18 +231,48 @@ const resourceFromConfig = (config: AppConfig): string | undefined => {
   )?.trim();
 };
 
+const normalizeStringArray = (value: unknown): string[] => {
+  if (!value) {
+    return [];
+  }
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => String(item).trim())
+      .filter(Boolean);
+  }
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) {
+        return normalizeStringArray(parsed);
+      }
+    } catch {
+      // Treat plain string value as a single entry.
+      return [value.trim()].filter(Boolean);
+    }
+    return value
+      .split(/[\s,]+/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+  return [];
+};
+
 const defaultScopesFromConfig = (config: AppConfig): string[] => {
   const scopes =
     normalizeScopeInput(config.default_scopes) ||
     normalizeScopeInput(config.oauth?.default_scopes) ||
     normalizeScopeInput(config.oauth?.client?.default_scopes);
   if (scopes.length > 0) {
-    return scopes;
+    return canonicalizeScopes(scopes);
   }
   const scopeString =
     config.oauth?.scope ?? config.oauth?.client?.scope ?? undefined;
   const normalized = normalizeScopeInput(scopeString);
-  return normalized.length > 0 ? normalized : [];
+  if (normalized.length > 0) {
+    return canonicalizeScopes(normalized);
+  }
+  return [];
 };
 
 const coerceStringArray = (value: Nullable<string[] | string>): string[] => {
@@ -425,12 +468,14 @@ const appRowToApp = (row?: AppRow | null): App | undefined => {
   const config = parseAppConfig(row.config);
   const resourceUri = resourceFromConfig(config) ?? "";
   const defaultScopes = defaultScopesFromConfig(config);
+  const mcpServerIds = normalizeStringArray(row.mcp_server_ids);
   return {
     id: row.id,
     uuid: row.id,
     name: row.name,
     resource_uri: resourceUri,
-    default_scopes: defaultScopes.join(" "),
+    mcp_server_ids: mcpServerIds,
+    default_scopes: canonicalizeScopes(defaultScopes).join(" "),
     status: row.status ?? undefined,
     config,
   };
@@ -443,10 +488,14 @@ const appConfigClientToClient = (
   const redirectUris = coerceStringArray(clientConfig.redirect_uris);
   const grantTypes = coerceStringArray(clientConfig.grant_types);
   const scopeString =
-    clientConfig.scope ||
-    defaultScopesFromConfig(app.config).join(" ") ||
-    app.default_scopes ||
-    DEFAULT_SCOPE_FALLBACK.join(" ");
+    (clientConfig.scope && canonicalScopeString(clientConfig.scope)) ||
+    (defaultScopesFromConfig(app.config).length > 0
+      ? canonicalScopeString(defaultScopesFromConfig(app.config))
+      : "") ||
+    (app.default_scopes
+      ? canonicalScopeString(app.default_scopes)
+      : "") ||
+    canonicalScopeString(DEFAULT_SCOPE_FALLBACK);
 
   return {
     client_id: clientConfig.client_id ?? "",
@@ -499,7 +548,7 @@ const normalizeResource = (value: string): string =>
 const fetchAllApps = async (): Promise<App[]> => {
   const { data, error } = await supabase
     .from("apps")
-    .select("id,name,config,status,created_at,updated_at");
+    .select("id,name,config,status,mcp_server_ids,created_at,updated_at");
   if (error) {
     throw new Error(`Failed to fetch apps: ${error.message}`);
   }
@@ -607,11 +656,14 @@ export const findAppByResource = async (
 ): Promise<App | undefined> => {
   const target = normalizeResource(resourceUri);
   const apps = await fetchAllApps();
-  return apps.find(
-    (app) =>
-      app.resource_uri &&
-      normalizeResource(app.resource_uri) === target
-  );
+  return apps.find((app) => {
+    if (app.resource_uri && normalizeResource(app.resource_uri) === target) {
+      return true;
+    }
+    return app.mcp_server_ids.some(
+      (serverId) => normalizeResource(serverId) === target
+    );
+  });
 };
 
 export const findAppByUuid = async (uuid: string): Promise<App | undefined> => {
@@ -637,15 +689,15 @@ export const getAppScopes = (app: App): string[] => {
   }
   const storedScopes = parseScopes(app.default_scopes);
   if (storedScopes.length > 0) {
-    return storedScopes;
+    return canonicalizeScopes(storedScopes);
   }
   const clientScopes = appConfigClients(app.config)
     .map((client) => normalizeScopeInput(client.scope))
     .find((scopes) => scopes.length > 0);
   if (clientScopes && clientScopes.length > 0) {
-    return clientScopes;
+    return canonicalizeScopes(clientScopes);
   }
-  return [...DEFAULT_SCOPE_FALLBACK];
+  return canonicalizeScopes([...DEFAULT_SCOPE_FALLBACK]);
 };
 
 export const getAllSupportedScopes = async (): Promise<string[]> => {
@@ -657,7 +709,7 @@ export const getAllSupportedScopes = async (): Promise<string[]> => {
   if (scopeSet.size === 0) {
     DEFAULT_SCOPE_FALLBACK.forEach((scope) => scopeSet.add(scope));
   }
-  return Array.from(scopeSet);
+  return canonicalizeScopes(Array.from(scopeSet));
 };
 
 export const findClientById = async (
@@ -729,7 +781,9 @@ export const createClient = async (
     application_type: client.application_type,
     redirect_uris: client.redirect_uris,
     grant_types: client.grant_types,
-    scope: client.scope ?? getAppScopes(app).join(" "),
+    scope:
+      (client.scope && canonicalScopeString(client.scope)) ||
+      canonicalScopeString(getAppScopes(app)),
     token_endpoint_auth_method: client.token_endpoint_auth_method,
     registration_access_token: registrationAccessToken,
     registration_client_uri: registrationClientUri,
@@ -768,7 +822,7 @@ export const updateClientScopes = async (
       updated = true;
       return {
         ...clientConfig,
-        scope,
+        scope: canonicalScopeString(scope),
       };
     }
     return clientConfig;
@@ -805,7 +859,7 @@ export const persistAuthorizationCode = async (
     user_uuid: code.user_uuid,
     client_id: code.client_id,
     redirect_uri: code.redirect_uri,
-    scope: code.scope,
+    scope: canonicalScopeString(code.scope),
     code_challenge: code.code_challenge,
     code_challenge_method: code.code_challenge_method,
     resource: code.resource,
@@ -876,7 +930,7 @@ export const consumeAuthorizationCode = async (
 };
 
 export const storeAccessToken = async (token: StoredToken): Promise<void> => {
-  const { error } = await supabase.from("access_tokens").insert({
+  const { error } = await supabase.from("app_user_access_tokens").insert({
     token: token.token,
     user_uuid: token.user_uuid,
     client_id: token.client_id,
@@ -890,7 +944,7 @@ export const storeAccessToken = async (token: StoredToken): Promise<void> => {
 };
 
 export const storeRefreshToken = async (token: StoredToken): Promise<void> => {
-  const { error } = await supabase.from("refresh_tokens").insert({
+  const { error } = await supabase.from("app_user_refresh_tokens").insert({
     token: token.token,
     user_uuid: token.user_uuid,
     client_id: token.client_id,
@@ -907,7 +961,7 @@ export const findRefreshToken = async (
   token: string
 ): Promise<StoredToken | undefined> => {
   const { data, error } = await supabase
-    .from("refresh_tokens")
+    .from("app_user_refresh_tokens")
     .select("*")
     .eq("token", token)
     .maybeSingle();
@@ -928,7 +982,7 @@ export const findRefreshToken = async (
 
 export const revokeRefreshToken = async (token: string): Promise<void> => {
   const { error } = await supabase
-    .from("refresh_tokens")
+    .from("app_user_refresh_tokens")
     .delete()
     .eq("token", token);
   if (error) {

@@ -1,0 +1,734 @@
+<!DOCTYPE html><html lang="en"> <head><!-- Global Metadata --><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" type="image/png" href="/favicon.png"><meta name="generator" content="Astro v5.13.2"><link rel="preload" href="/fonts/OpenAISans-Regular.woff" as="font" type="font/woff" crossorigin><link rel="preload" href="/fonts/OpenAISans-Bold.woff" as="font" type="font/woff" crossorigin><!-- Canonical URL --><link rel="canonical" href="https://developers.openai.com/apps-sdk/build/auth/"><!-- Primary Meta Tags --><title>Authentication</title><meta name="title" content="Authentication"><meta name="description" content="Authentication patterns for Apps SDK apps."><!-- Open Graph / Facebook --><meta property="og:type" content="website"><meta property="og:url" content="https://developers.openai.com/apps-sdk/build/auth/"><meta property="og:title" content="Authentication"><meta property="og:description" content="Authentication patterns for Apps SDK apps."><meta property="og:image" content="https://developers.openai.com/apps-og-card.png"><!-- Twitter --><meta name="twitter:card" content="summary_large_image"><meta name="twitter:url" content="https://developers.openai.com/apps-sdk/build/auth/"><meta name="twitter:title" content="Authentication"><meta name="twitter:description" content="Authentication patterns for Apps SDK apps."><meta name="twitter:image" content="https://developers.openai.com/apps-og-card.png"><!-- Sitemap --><link rel="sitemap" href="/sitemap-index.xml"><!-- RSS Feed --><link rel="alternate" type="application/rss+xml" title="Authentication" href="https://developers.openai.com/rss.xml"><!-- Global Scripts --><script src="/js/theme.js"></script><script src="/js/scroll.js"></script><script src="/js/animate.js"></script><script defer src="/js/copy.js"></script><meta name="astro-view-transitions-enabled" content="true"><meta name="astro-view-transitions-fallback" content="animate"><script type="module" src="/_astro/ClientRouter.astro_astro_type_script_index_0_lang.DZnDNxNb.js"></script><script type="module">document.addEventListener("astro:before-swap",e=>[...e.newDocument.head.querySelectorAll('link[as="font"]')].forEach(o=>o.remove()));</script><link rel="stylesheet" href="/_astro/_slug_.C3QpthdI.css">
+<style>html{scroll-behavior:smooth}article.prose h2{scroll-margin-top:110px}
+</style></head> <body class="overflow-x-hidden"> <header id="header" class="fixed top-0 w-full h-16 z-50 bg-white dark:bg-black" data-astro-cid-3ef6ksr2> <div class="flex items-center justify-between h-full pl-8" data-astro-cid-3ef6ksr2> <!-- Logo --> <a href="/" class="flex items-center font-semibold" data-astro-cid-3ef6ksr2> <img src="/OpenAI_Developers.svg" alt="OpenAI Developers" class="h-4 md:h-5 dark:invert" data-astro-cid-3ef6ksr2> </a> <!-- Nav, Theme Toggle, Mobile Menu --> <div class="flex items-center space-x-6" data-astro-cid-3ef6ksr2> <!-- Links --> <nav class="hidden md:flex items-center gap-1" data-astro-cid-3ef6ksr2> <a href="/" class="text-sm px-2.5 py-1 rounded-lg text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-900" data-astro-cid-3ef6ksr2> Resources </a><a href="/codex" class="text-sm px-2.5 py-1 rounded-lg text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-900" data-astro-cid-3ef6ksr2> Codex </a><a href="/chatgpt" class="text-sm px-2.5 py-1 rounded-lg text-gray-900 dark:text-gray-100 bg-gray-100 dark:bg-gray-800" data-astro-cid-3ef6ksr2> ChatGPT </a><a href="/blog" class="text-sm px-2.5 py-1 rounded-lg text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-900" data-astro-cid-3ef6ksr2> Blog </a> <span class="w-px h-5 bg-gray-200 dark:bg-gray-400 mx-2" data-astro-cid-3ef6ksr2></span>  <button type="button" data-header-search-button aria-expanded="false" class="hidden md:flex items-center gap-2 rounded-lg px-2 py-1 text-sm text-gray-700 transition-colors hover:text-gray-900 dark:text-gray-200 dark:hover:text-gray-100" data-astro-cid-3ef6ksr2> <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 " data-astro-cid-3ef6ksr2="true" ><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg> <span class="hidden lg:inline" data-astro-cid-3ef6ksr2>Search</span> <span class="hidden xl:inline text-xs text-gray-400 dark:text-gray-500 mt-0.5" data-astro-cid-3ef6ksr2>⌘K</span> </button> <button id="header-theme-button" aria-label="Toggle light and dark theme" class="hidden md:flex text-gray-700 md:ml-2 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100 transition-colors mr-4" data-astro-cid-3ef6ksr2> <svg width="22" height="22" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg" class="block dark:hidden w-4 h-4 " data-astro-cid-3ef6ksr2="true" ><path fill-rule="evenodd" clip-rule="evenodd" d="M11 0C11.5523 0 12 0.447715 12 1V3C12 3.55228 11.5523 4 11 4C10.4477 4 10 3.55228 10 3V1C10 0.447715 10.4477 0 11 0ZM3.22183 3.22183C3.61235 2.8313 4.24551 2.8313 4.63604 3.22183L6.05025 4.63604C6.44078 5.02656 6.44078 5.65973 6.05025 6.05025C5.65973 6.44078 5.02656 6.44078 4.63604 6.05025L3.22183 4.63604C2.8313 4.24551 2.8313 3.61235 3.22183 3.22183ZM18.7782 3.22183C19.1687 3.61235 19.1687 4.24551 18.7782 4.63604L17.364 6.05025C16.9734 6.44078 16.3403 6.44078 15.9497 6.05025C15.5592 5.65973 15.5592 5.02656 15.9497 4.63604L17.364 3.22183C17.7545 2.8313 18.3876 2.8313 18.7782 3.22183ZM11 8C9.34315 8 8 9.34315 8 11C8 12.6569 9.34315 14 11 14C12.6569 14 14 12.6569 14 11C14 9.34315 12.6569 8 11 8ZM6 11C6 8.23858 8.23858 6 11 6C13.7614 6 16 8.23858 16 11C16 13.7614 13.7614 16 11 16C8.23858 16 6 13.7614 6 11ZM0 11C0 10.4477 0.447715 10 1 10H3C3.55228 10 4 10.4477 4 11C4 11.5523 3.55228 12 3 12H1C0.447715 12 0 11.5523 0 11ZM18 11C18 10.4477 18.4477 10 19 10H21C21.5523 10 22 10.4477 22 11C22 11.5523 21.5523 12 21 12H19C18.4477 12 18 11.5523 18 11ZM6.05025 15.9497C6.44078 16.3403 6.44078 16.9734 6.05025 17.364L4.63604 18.7782C4.24551 19.1687 3.61235 19.1687 3.22183 18.7782C2.8313 18.3876 2.8313 17.7545 3.22183 17.364L4.63604 15.9497C5.02656 15.5592 5.65973 15.5592 6.05025 15.9497ZM15.9497 15.9497C16.3403 15.5592 16.9734 15.5592 17.364 15.9497L18.7782 17.364C19.1687 17.7545 19.1687 18.3876 18.7782 18.7782C18.3877 19.1687 17.7545 19.1687 17.364 18.7782L15.9497 17.364C15.5592 16.9734 15.5592 16.3403 15.9497 15.9497ZM11 18C11.5523 18 12 18.4477 12 19V21C12 21.5523 11.5523 22 11 22C10.4477 22 10 21.5523 10 21V19C10 18.4477 10.4477 18 11 18Z" fill="currentColor"></path></svg> <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" class="hidden dark:block w-4 h-4 " data-astro-cid-3ef6ksr2="true" ><path d="M10.7836 0.470481C10.9676 0.765118 10.9855 1.13415 10.8309 1.44525C10.2994 2.51497 10 3.7211 10 5.00001C10 9.41829 13.5817 13 18 13L18.0575 12.9998C18.4049 12.9974 18.7287 13.1754 18.9127 13.47C19.0968 13.7647 19.1147 14.1337 18.9601 14.4448C17.325 17.7352 13.9279 20 10 20C4.47715 20 0 15.5229 0 10C0 4.50107 4.43841 0.038857 9.92838 0.000268937C10.2758 -0.00217271 10.5995 0.175844 10.7836 0.470481ZM8.40989 2.15803C4.75344 2.8954 2 6.12619 2 10C2 14.4183 5.58172 18 10 18C12.587 18 14.8886 16.7721 16.3516 14.8648C11.6131 14.0789 8 9.96139 8 5.00001C8 4.01361 8.1431 3.05953 8.40989 2.15803Z" fill="currentColor"></path></svg> </button> </nav> <!-- Mobile Menu Button --> <button id="header-drawer-button" type="button" aria-label="Toggle menu" aria-controls="drawer" aria-expanded="false" class="md:hidden relative right-4 text-gray-700 hover:text-gray-900 transition-colors" data-astro-cid-3ef6ksr2> <svg width="18" height="10" viewBox="0 0 18 10" fill="none" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-gray-100 transition-colors " data-astro-cid-3ef6ksr2="true" ><path d="M0 1C0 0.447715 0.447715 0 1 0H17C17.5523 0 18 0.447715 18 1C18 1.55228 17.5523 2 17 2H1C0.447715 2 0 1.55228 0 1ZM0 9C0 8.44772 0.447715 8 1 8H11C11.5523 8 12 8.44772 12 9C12 9.55229 11.5523 10 11 10H1C0.447715 10 0 9.55229 0 9Z" fill="currentColor"></path></svg> </button> </div> </div> </header> <div id="header-search-overlay" role="dialog" aria-modal="true" aria-labelledby="header-search-title" aria-hidden="true" data-open="false" class="fixed inset-0 z-[60] hidden items-start justify-center px-4 pt-24 pb-12 md:pt-28" data-astro-cid-3ef6ksr2> <div class="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity dark:bg-black/70" data-header-search-dismiss data-astro-cid-3ef6ksr2></div> <div class="relative z-10 w-full max-w-3xl overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-black/10 dark:bg-gray-900 dark:ring-white/10" data-header-search-panel data-astro-cid-3ef6ksr2> <div data-header-search-toolbar class="flex items-center justify-between border-b border-gray-100 px-4 py-4 dark:border-gray-800 md:px-6" data-astro-cid-3ef6ksr2> <h2 id="header-search-title" class="text-sm font-semibold text-gray-900 dark:text-gray-100" data-astro-cid-3ef6ksr2>
+Search the docs
+</h2> <div class="flex items-center gap-3 text-xs text-gray-400 dark:text-gray-500" data-astro-cid-3ef6ksr2> <div class="hidden sm:flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 font-medium dark:border-gray-700" data-astro-cid-3ef6ksr2> <span class="font-mono" data-astro-cid-3ef6ksr2>⌘</span> <span class="font-mono" data-astro-cid-3ef6ksr2>K</span> <span class="font-mono text-gray-300 dark:text-gray-600" data-astro-cid-3ef6ksr2>/</span> <span class="font-mono" data-astro-cid-3ef6ksr2>Ctrl</span> <span class="font-mono" data-astro-cid-3ef6ksr2>K</span> </div> <button type="button" data-header-search-close class="items-center gap-2 rounded-md px-2 py-1 text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 md:flex" data-astro-cid-3ef6ksr2>
+Close
+</button> </div> </div> <div data-header-search-body class="px-4 py-5 md:px-6 md:py-6" data-astro-cid-3ef6ksr2> <div id="header-site-search" class="pagefind-header-ui pagefind-desktop-ui pagefind-init" data-pagefind-ui data-bundle-path="/pagefind/" data-ui-options="{&#34;showImages&#34;:false,&#34;showSubResults&#34;:false,&#34;translations&#34;:{&#34;placeholder&#34;:&#34;Search the site&#34;,&#34;zeroResults&#34;:&#34;No matches yet. Try a different keyword.&#34;}}"></div> <script type="module" src="/_astro/Search.astro_astro_type_script_index_0_lang.tZYucdM2.js"></script> </div> </div> </div> <div id="drawer" data-default-tab-id="mobile-nav-tab-2" class="fixed inset-0 z-40 flex flex-col bg-white dark:bg-black transform translate-x-full transition-transform duration-300 md:hidden" data-astro-cid-3ef6ksr2> <div class="flex flex-col h-full w-full" data-astro-cid-3ef6ksr2> <div class="px-6 pt-6 w-full mt-16" data-astro-cid-3ef6ksr2> <span id="mobile-nav-primary-label" class="sr-only" data-astro-cid-3ef6ksr2>Primary navigation</span> <div class="relative" data-astro-cid-3ef6ksr2> <button type="button" id="mobile-nav-trigger" class="flex w-full items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-900 transition-colors duration-150 hover:border-gray-300 hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-300 data-[open=true]:border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:border-gray-600 dark:hover:bg-gray-800 dark:focus-visible:outline-gray-600 dark:data-[open=true]:border-gray-600" data-mobile-nav-trigger aria-haspopup="listbox" aria-expanded="false" aria-controls="mobile-nav-dropdown" aria-labelledby="mobile-nav-primary-label mobile-nav-trigger-value" data-astro-cid-3ef6ksr2> <span id="mobile-nav-trigger-value" data-mobile-nav-label class="flex-1 truncate text-left" data-astro-cid-3ef6ksr2> ChatGPT </span> <span data-mobile-nav-chevron class="flex h-5 w-5 shrink-0 items-center justify-center text-gray-500 transition-transform duration-200 data-[open=true]:rotate-180 data-[open=true]:text-gray-700 dark:text-gray-400 dark:data-[open=true]:text-gray-200" data-astro-cid-3ef6ksr2> <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 " aria-hidden="true" data-astro-cid-3ef6ksr2="true" ><path d="M11.2929 16.2929C11.6834 16.6834 12.3166 16.6834 12.7071 16.2929L18.7071 10.2929C19.0976 9.90237 19.0976 9.26921 18.7071 8.87868C18.3166 8.48816 17.6834 8.48816 17.2929 8.87868L12 14.1716L6.70711 8.87868C6.31658 8.48816 5.68342 8.48816 5.29289 8.87868C4.90237 9.26921 4.90237 9.90237 5.29289 10.2929L11.2929 16.2929Z" fill="currentColor"></path></svg> </span> </button> <div id="mobile-nav-dropdown" role="listbox" aria-labelledby="mobile-nav-primary-label" tabindex="-1" class="absolute left-0 right-0 top-full z-50 mt-2 max-h-[60vh] overflow-y-auto rounded-xl border border-gray-200 bg-white p-1 shadow-xl shadow-gray-900/10 ring-1 ring-black/5 opacity-0 scale-95 origin-top transition duration-150 ease-out data-[open=true]:opacity-100 data-[open=true]:scale-100 dark:border-gray-700 dark:bg-gray-900 dark:ring-white/10" data-mobile-nav-dropdown hidden data-astro-cid-3ef6ksr2> <button type="button" role="option" data-mobile-nav-option data-tab-id="mobile-nav-tab-0" data-has-nav="true" data-href="/" data-label="Resources" data-selected="false" aria-selected="false" class="flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium leading-5 text-gray-700 transition-colors duration-150 data-[selected=true]:bg-gray-100 data-[selected=true]:text-gray-900 data-[selected=true]:shadow-inner hover:bg-gray-50 hover:text-gray-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-300 dark:text-gray-200 dark:data-[selected=true]:bg-gray-800 dark:data-[selected=true]:text-white dark:data-[selected=true]:shadow-inner dark:hover:bg-gray-800 dark:hover:text-gray-100 dark:focus-visible:outline-gray-600" data-astro-cid-3ef6ksr2> <span class="flex-1 truncate" data-astro-cid-3ef6ksr2>Resources</span> <span data-mobile-nav-option-indicator data-selected="false" class="h-2.5 w-2.5 rounded-full border border-gray-200 bg-transparent transition duration-150 data-[selected=true]:border-transparent data-[selected=true]:bg-gray-500 dark:border-gray-700 dark:data-[selected=true]:bg-gray-300" aria-hidden="true" data-astro-cid-3ef6ksr2></span> </button><button type="button" role="option" data-mobile-nav-option data-tab-id="mobile-nav-tab-1" data-has-nav="true" data-href="/codex" data-label="Codex" data-selected="false" aria-selected="false" class="flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium leading-5 text-gray-700 transition-colors duration-150 data-[selected=true]:bg-gray-100 data-[selected=true]:text-gray-900 data-[selected=true]:shadow-inner hover:bg-gray-50 hover:text-gray-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-300 dark:text-gray-200 dark:data-[selected=true]:bg-gray-800 dark:data-[selected=true]:text-white dark:data-[selected=true]:shadow-inner dark:hover:bg-gray-800 dark:hover:text-gray-100 dark:focus-visible:outline-gray-600" data-astro-cid-3ef6ksr2> <span class="flex-1 truncate" data-astro-cid-3ef6ksr2>Codex</span> <span data-mobile-nav-option-indicator data-selected="false" class="h-2.5 w-2.5 rounded-full border border-gray-200 bg-transparent transition duration-150 data-[selected=true]:border-transparent data-[selected=true]:bg-gray-500 dark:border-gray-700 dark:data-[selected=true]:bg-gray-300" aria-hidden="true" data-astro-cid-3ef6ksr2></span> </button><button type="button" role="option" data-mobile-nav-option data-tab-id="mobile-nav-tab-2" data-has-nav="true" data-href="/chatgpt" data-label="ChatGPT" data-selected="true" aria-selected="true" class="flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium leading-5 text-gray-700 transition-colors duration-150 data-[selected=true]:bg-gray-100 data-[selected=true]:text-gray-900 data-[selected=true]:shadow-inner hover:bg-gray-50 hover:text-gray-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-300 dark:text-gray-200 dark:data-[selected=true]:bg-gray-800 dark:data-[selected=true]:text-white dark:data-[selected=true]:shadow-inner dark:hover:bg-gray-800 dark:hover:text-gray-100 dark:focus-visible:outline-gray-600" data-astro-cid-3ef6ksr2> <span class="flex-1 truncate" data-astro-cid-3ef6ksr2>ChatGPT</span> <span data-mobile-nav-option-indicator data-selected="true" class="h-2.5 w-2.5 rounded-full border border-gray-200 bg-transparent transition duration-150 data-[selected=true]:border-transparent data-[selected=true]:bg-gray-500 dark:border-gray-700 dark:data-[selected=true]:bg-gray-300" aria-hidden="true" data-astro-cid-3ef6ksr2></span> </button><button type="button" role="option" data-mobile-nav-option data-tab-id="mobile-nav-tab-3" data-has-nav="true" data-href="/blog" data-label="Blog" data-selected="false" aria-selected="false" class="flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium leading-5 text-gray-700 transition-colors duration-150 data-[selected=true]:bg-gray-100 data-[selected=true]:text-gray-900 data-[selected=true]:shadow-inner hover:bg-gray-50 hover:text-gray-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-300 dark:text-gray-200 dark:data-[selected=true]:bg-gray-800 dark:data-[selected=true]:text-white dark:data-[selected=true]:shadow-inner dark:hover:bg-gray-800 dark:hover:text-gray-100 dark:focus-visible:outline-gray-600" data-astro-cid-3ef6ksr2> <span class="flex-1 truncate" data-astro-cid-3ef6ksr2>Blog</span> <span data-mobile-nav-option-indicator data-selected="false" class="h-2.5 w-2.5 rounded-full border border-gray-200 bg-transparent transition duration-150 data-[selected=true]:border-transparent data-[selected=true]:bg-gray-500 dark:border-gray-700 dark:data-[selected=true]:bg-gray-300" aria-hidden="true" data-astro-cid-3ef6ksr2></span> </button> </div> </div> </div> <div class="flex-1 w-full overflow-y-auto px-6 py-4 space-y-6" data-mobile-nav-panels data-astro-cid-3ef6ksr2> <div data-mobile-search data-astro-cid-3ef6ksr2> <div id="header-mobile-search" class="pagefind-header-ui pagefind-mobile-ui pagefind-init" data-pagefind-ui data-bundle-path="/pagefind/" data-ui-options="{&#34;showImages&#34;:false,&#34;showSubResults&#34;:false,&#34;translations&#34;:{&#34;placeholder&#34;:&#34;Search the site&#34;,&#34;zeroResults&#34;:&#34;No matches yet. Try a different keyword.&#34;}}"></div>  <nav aria-label="Breadcrumb" class="mt-3 px-1 text-[11px] text-gray-500 dark:text-gray-400" data-astro-cid-3ef6ksr2> <ol class="flex items-center gap-1 whitespace-nowrap overflow-x-auto" data-astro-cid-3ef6ksr2> <li class="flex items-center gap-1" data-astro-cid-3ef6ksr2>  <a href="/chatgpt" class="transition-colors hover:text-gray-900 dark:hover:text-gray-100" data-astro-cid-3ef6ksr2> ChatGPT </a> </li><li class="flex items-center gap-1" data-astro-cid-3ef6ksr2> <span class="text-gray-400 dark:text-gray-600" aria-hidden="true" data-astro-cid-3ef6ksr2>
+&gt;
+</span> <a href="/apps-sdk" class="transition-colors hover:text-gray-900 dark:hover:text-gray-100" data-astro-cid-3ef6ksr2> Apps SDK </a> </li> </ol> </nav> </div> <div id="mobile-nav-panel-0" data-mobile-nav-content data-tab-id="mobile-nav-tab-0" hidden class="space-y-6 pb-8" data-astro-cid-3ef6ksr2> <div class="space-y-3" data-astro-cid-3ef6ksr2>  <ul class="flex flex-col gap-1 text-sm text-gray-700 dark:text-gray-200 w-full"> <li> <a href="/" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Home  </a> </li> </ul> </div><div class="space-y-3" data-astro-cid-3ef6ksr2> <h3 class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400" data-astro-cid-3ef6ksr2> Categories </h3> <ul class="flex flex-col gap-1 text-sm text-gray-700 dark:text-gray-200 w-full"> <li> <a href="/resources/code" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Code  </a> </li><li> <a href="/resources/cookbooks" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Cookbooks  </a> </li><li> <a href="/resources/guides" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Guides  </a> </li><li> <a href="/resources/videos" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Videos  </a> </li> </ul> </div><div class="space-y-3" data-astro-cid-3ef6ksr2> <h3 class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400" data-astro-cid-3ef6ksr2> Topics </h3> <ul class="flex flex-col gap-1 text-sm text-gray-700 dark:text-gray-200 w-full"> <li> <a href="/topics/agents" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Agents  </a> </li><li> <a href="/topics/audio" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Audio &amp; Voice  </a> </li><li> <a href="/topics/imagegen" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Image generation  </a> </li><li> <a href="/topics/videogen" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Video generation  </a> </li><li> <a href="/topics/tools" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Tools  </a> </li><li> <a href="/topics/cua" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Computer use  </a> </li><li> <a href="/topics/fine-tuning" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Fine-tuning  </a> </li><li> <a href="/topics/scaling" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Scaling  </a> </li> </ul> </div> </div><div id="mobile-nav-panel-1" data-mobile-nav-content data-tab-id="mobile-nav-tab-1" hidden class="space-y-6 pb-8" data-astro-cid-3ef6ksr2> <div class="space-y-3" data-astro-cid-3ef6ksr2>  <ul class="flex flex-col gap-1 text-sm text-gray-700 dark:text-gray-200 w-full"> <li> <a href="/codex" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Home  </a> </li><li> <a href="/codex/quickstart" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Quickstart  </a> </li><li> <a href="/codex/concepts" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Concepts  </a> </li><li> <a href="/codex/pricing" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Pricing  </a> </li><li> <a href="/codex/changelog" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Changelog  </a> </li> </ul> </div><div class="space-y-3" data-astro-cid-3ef6ksr2> <h3 class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400" data-astro-cid-3ef6ksr2> Codex CLI </h3> <ul class="flex flex-col gap-1 text-sm text-gray-700 dark:text-gray-200 w-full"> <li> <a href="/codex/cli" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Overview  </a> </li><li> <a href="/codex/cli/reference" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> CLI Reference  </a> </li><li> <a href="/codex/local-config#cli" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Configuration  </a> </li> </ul> </div><div class="space-y-3" data-astro-cid-3ef6ksr2> <h3 class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400" data-astro-cid-3ef6ksr2> Codex IDE Extension </h3> <ul class="flex flex-col gap-1 text-sm text-gray-700 dark:text-gray-200 w-full"> <li> <a href="/codex/ide" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Set up your IDE  </a> </li><li> <a href="/codex/local-config#ide" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Configuration  </a> </li><li> <a href="/codex/ide/cloud-tasks" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> IDE → Cloud tasks  </a> </li> </ul> </div><div class="space-y-3" data-astro-cid-3ef6ksr2> <h3 class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400" data-astro-cid-3ef6ksr2> Codex Cloud </h3> <ul class="flex flex-col gap-1 text-sm text-gray-700 dark:text-gray-200 w-full"> <li> <a href="/codex/cloud" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Delegate to Codex  </a> </li><li> <a href="/codex/cloud/environments" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Environments  </a> </li><li> <a href="/codex/cloud/code-review" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Code Review  </a> </li><li> <a href="/codex/cloud/internet-access" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Internet Access  </a> </li> </ul> </div><div class="space-y-3" data-astro-cid-3ef6ksr2> <h3 class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400" data-astro-cid-3ef6ksr2> Codex SDK </h3> <ul class="flex flex-col gap-1 text-sm text-gray-700 dark:text-gray-200 w-full"> <li> <a href="/codex/sdk" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Overview  </a> </li><li> <a href="/codex/sdk#typescript-library" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> TypeScript  </a> </li><li> <a href="/codex/sdk#github-action" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> GitHub Action  </a> </li> </ul> </div><div class="space-y-3" data-astro-cid-3ef6ksr2> <h3 class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400" data-astro-cid-3ef6ksr2> Guides </h3> <ul class="flex flex-col gap-1 text-sm text-gray-700 dark:text-gray-200 w-full"> <li> <a href="/codex/guides/agents-sdk" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Agents SDK  </a> </li><li> <a href="/codex/prompting" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Prompting Codex  </a> </li><li> <a href="/codex/mcp" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Model Context Protocol (MCP)  </a> </li><li> <a href="/codex/autofix-ci" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Autofix CI  </a> </li><li> <a href="/codex/enterprise" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Enterprise Admin  </a> </li><li> <a href="/codex/security" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Security Admin  </a> </li><li> <a href="/codex/windows" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Codex on Windows  </a> </li> </ul> </div><div class="space-y-3" data-astro-cid-3ef6ksr2> <h3 class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400" data-astro-cid-3ef6ksr2> Integrations </h3> <ul class="flex flex-col gap-1 text-sm text-gray-700 dark:text-gray-200 w-full"> <li> <a href="/codex/integrations/slack" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Slack  </a> </li> </ul> </div><div class="space-y-3" data-astro-cid-3ef6ksr2> <h3 class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400" data-astro-cid-3ef6ksr2> Resources </h3> <ul class="flex flex-col gap-1 text-sm text-gray-700 dark:text-gray-200 w-full"> <li> <a href="https://agents.md" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 flex items-center justify-between gap-2" target="_blank" rel="noopener noreferrer" data-mobile-nav-link> AGENTS.md <svg viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" class="w-2 h-2 inline-block ml-1 text-gray-600 dark:text-gray-300 " ><path d="M10.2426 0.757385C10.7949 0.757385 11.2426 1.2051 11.2426 1.75738V8.82845C11.2426 9.38074 10.7949 9.82845 10.2426 9.82845C9.69035 9.82845 9.24264 9.38074 9.24264 8.82845V4.1716L2.46446 10.9498C2.07394 11.3403 1.44077 11.3403 1.05025 10.9498C0.659724 10.5592 0.659723 9.92608 1.05025 9.53556L7.82842 2.75739H3.17157C2.61928 2.75739 2.17157 2.30967 2.17157 1.75738C2.17157 1.2051 2.61928 0.757385 3.17157 0.757385H10.2426Z" fill="currentColor"></path></svg> </a> </li><li> <a href="https://github.com/openai/codex" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 flex items-center justify-between gap-2" target="_blank" rel="noopener noreferrer" data-mobile-nav-link> Codex on GitHub <svg viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" class="w-2 h-2 inline-block ml-1 text-gray-600 dark:text-gray-300 " ><path d="M10.2426 0.757385C10.7949 0.757385 11.2426 1.2051 11.2426 1.75738V8.82845C11.2426 9.38074 10.7949 9.82845 10.2426 9.82845C9.69035 9.82845 9.24264 9.38074 9.24264 8.82845V4.1716L2.46446 10.9498C2.07394 11.3403 1.44077 11.3403 1.05025 10.9498C0.659724 10.5592 0.659723 9.92608 1.05025 9.53556L7.82842 2.75739H3.17157C2.61928 2.75739 2.17157 2.30967 2.17157 1.75738C2.17157 1.2051 2.61928 0.757385 3.17157 0.757385H10.2426Z" fill="currentColor"></path></svg> </a> </li> </ul> </div> </div><div id="mobile-nav-panel-2" data-mobile-nav-content data-tab-id="mobile-nav-tab-2" class="space-y-6 pb-8" data-astro-cid-3ef6ksr2> <div class="space-y-3" data-astro-cid-3ef6ksr2>  <ul class="flex flex-col gap-1 text-sm text-gray-700 dark:text-gray-200 w-full"> <li> <a href="/apps-sdk" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Home  </a> </li> </ul> </div><div class="space-y-3" data-astro-cid-3ef6ksr2> <h3 class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400" data-astro-cid-3ef6ksr2> Core Concepts </h3> <ul class="flex flex-col gap-1 text-sm text-gray-700 dark:text-gray-200 w-full"> <li> <a href="/apps-sdk/concepts/mcp-server" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> MCP Server  </a> </li><li> <a href="/apps-sdk/concepts/user-interaction" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> User interaction  </a> </li><li> <a href="/apps-sdk/concepts/design-guidelines" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Design guidelines  </a> </li> </ul> </div><div class="space-y-3" data-astro-cid-3ef6ksr2> <h3 class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400" data-astro-cid-3ef6ksr2> Plan </h3> <ul class="flex flex-col gap-1 text-sm text-gray-700 dark:text-gray-200 w-full"> <li> <a href="/apps-sdk/plan/use-case" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Research use cases  </a> </li><li> <a href="/apps-sdk/plan/tools" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Define tools  </a> </li><li> <a href="/apps-sdk/plan/components" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Design components  </a> </li> </ul> </div><div class="space-y-3" data-astro-cid-3ef6ksr2> <h3 class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400" data-astro-cid-3ef6ksr2> Build </h3> <ul class="flex flex-col gap-1 text-sm text-gray-700 dark:text-gray-200 w-full"> <li> <a href="/apps-sdk/build/mcp-server" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Set up your server  </a> </li><li> <a href="/apps-sdk/build/custom-ux" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Build a custom UX  </a> </li><li> <a href="/apps-sdk/build/auth" class="px-3 py-2 rounded-lg transition-colors block text-gray-900 bg-gray-100 dark:text-white dark:bg-gray-800 " data-mobile-nav-link> Authenticate users  </a> </li><li> <a href="/apps-sdk/build/storage" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Persist state  </a> </li><li> <a href="/apps-sdk/build/examples" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Examples  </a> </li> </ul> </div><div class="space-y-3" data-astro-cid-3ef6ksr2> <h3 class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400" data-astro-cid-3ef6ksr2> Deploy </h3> <ul class="flex flex-col gap-1 text-sm text-gray-700 dark:text-gray-200 w-full"> <li> <a href="/apps-sdk/deploy" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Deploy your app  </a> </li><li> <a href="/apps-sdk/deploy/connect-chatgpt" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Connect from ChatGPT  </a> </li><li> <a href="/apps-sdk/deploy/testing" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Test your integration  </a> </li> </ul> </div><div class="space-y-3" data-astro-cid-3ef6ksr2> <h3 class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400" data-astro-cid-3ef6ksr2> Guides </h3> <ul class="flex flex-col gap-1 text-sm text-gray-700 dark:text-gray-200 w-full"> <li> <a href="/apps-sdk/guides/optimize-metadata" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Optimize Metadata  </a> </li><li> <a href="/apps-sdk/guides/security-privacy" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Security &amp; Privacy  </a> </li><li> <a href="/apps-sdk/deploy/troubleshooting" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Troubleshooting  </a> </li> </ul> </div><div class="space-y-3" data-astro-cid-3ef6ksr2> <h3 class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400" data-astro-cid-3ef6ksr2> Resources </h3> <ul class="flex flex-col gap-1 text-sm text-gray-700 dark:text-gray-200 w-full"> <li> <a href="/apps-sdk/reference" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Reference  </a> </li><li> <a href="/apps-sdk/app-developer-guidelines" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> App developer guidelines  </a> </li> </ul> </div> </div><div id="mobile-nav-panel-3" data-mobile-nav-content data-tab-id="mobile-nav-tab-3" hidden class="space-y-6 pb-8" data-astro-cid-3ef6ksr2> <div class="space-y-3" data-astro-cid-3ef6ksr2>  <ul class="flex flex-col gap-1 text-sm text-gray-700 dark:text-gray-200 w-full"> <li> <a href="/blog" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> All posts  </a> </li> </ul> </div><div class="space-y-3" data-astro-cid-3ef6ksr2> <h3 class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400" data-astro-cid-3ef6ksr2> Recent </h3> <ul class="flex flex-col gap-1 text-sm text-gray-700 dark:text-gray-200 w-full"> <li> <a href="/blog/codex-for-documentation-dagster" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Using Codex for education at Dagster Labs  </a> </li><li> <a href="/blog/codex-at-devday" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> How Codex ran OpenAI DevDay 2025  </a> </li><li> <a href="/blog/responses-api" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Why we built the Responses API  </a> </li><li> <a href="/blog/realtime-api" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Developer notes on the Realtime API  </a> </li><li> <a href="/blog/intro" class="px-3 py-2 rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-mobile-nav-link> Hello, world!  </a> </li> </ul> </div> </div> </div> <div class="w-full px-6 py-6 border-t border-gray-100 dark:border-gray-800" data-astro-cid-3ef6ksr2> <div class="flex flex-wrap items-center justify-between gap-4 text-sm text-gray-700 dark:text-gray-300" data-astro-cid-3ef6ksr2> <div class="flex flex-wrap items-center gap-4" data-astro-cid-3ef6ksr2>  </div> <button id="drawer-theme-button" type="button" aria-label="Toggle light and dark theme" class="text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100 transition-colors flex items-center gap-2" data-astro-cid-3ef6ksr2> <svg width="22" height="22" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg" class="block dark:hidden w-6 h-6 " data-astro-cid-3ef6ksr2="true" ><path fill-rule="evenodd" clip-rule="evenodd" d="M11 0C11.5523 0 12 0.447715 12 1V3C12 3.55228 11.5523 4 11 4C10.4477 4 10 3.55228 10 3V1C10 0.447715 10.4477 0 11 0ZM3.22183 3.22183C3.61235 2.8313 4.24551 2.8313 4.63604 3.22183L6.05025 4.63604C6.44078 5.02656 6.44078 5.65973 6.05025 6.05025C5.65973 6.44078 5.02656 6.44078 4.63604 6.05025L3.22183 4.63604C2.8313 4.24551 2.8313 3.61235 3.22183 3.22183ZM18.7782 3.22183C19.1687 3.61235 19.1687 4.24551 18.7782 4.63604L17.364 6.05025C16.9734 6.44078 16.3403 6.44078 15.9497 6.05025C15.5592 5.65973 15.5592 5.02656 15.9497 4.63604L17.364 3.22183C17.7545 2.8313 18.3876 2.8313 18.7782 3.22183ZM11 8C9.34315 8 8 9.34315 8 11C8 12.6569 9.34315 14 11 14C12.6569 14 14 12.6569 14 11C14 9.34315 12.6569 8 11 8ZM6 11C6 8.23858 8.23858 6 11 6C13.7614 6 16 8.23858 16 11C16 13.7614 13.7614 16 11 16C8.23858 16 6 13.7614 6 11ZM0 11C0 10.4477 0.447715 10 1 10H3C3.55228 10 4 10.4477 4 11C4 11.5523 3.55228 12 3 12H1C0.447715 12 0 11.5523 0 11ZM18 11C18 10.4477 18.4477 10 19 10H21C21.5523 10 22 10.4477 22 11C22 11.5523 21.5523 12 21 12H19C18.4477 12 18 11.5523 18 11ZM6.05025 15.9497C6.44078 16.3403 6.44078 16.9734 6.05025 17.364L4.63604 18.7782C4.24551 19.1687 3.61235 19.1687 3.22183 18.7782C2.8313 18.3876 2.8313 17.7545 3.22183 17.364L4.63604 15.9497C5.02656 15.5592 5.65973 15.5592 6.05025 15.9497ZM15.9497 15.9497C16.3403 15.5592 16.9734 15.5592 17.364 15.9497L18.7782 17.364C19.1687 17.7545 19.1687 18.3876 18.7782 18.7782C18.3877 19.1687 17.7545 19.1687 17.364 18.7782L15.9497 17.364C15.5592 16.9734 15.5592 16.3403 15.9497 15.9497ZM11 18C11.5523 18 12 18.4477 12 19V21C12 21.5523 11.5523 22 11 22C10.4477 22 10 21.5523 10 21V19C10 18.4477 10.4477 18 11 18Z" fill="currentColor"></path></svg> <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" class="hidden dark:block w-6 h-6 " data-astro-cid-3ef6ksr2="true" ><path d="M10.7836 0.470481C10.9676 0.765118 10.9855 1.13415 10.8309 1.44525C10.2994 2.51497 10 3.7211 10 5.00001C10 9.41829 13.5817 13 18 13L18.0575 12.9998C18.4049 12.9974 18.7287 13.1754 18.9127 13.47C19.0968 13.7647 19.1147 14.1337 18.9601 14.4448C17.325 17.7352 13.9279 20 10 20C4.47715 20 0 15.5229 0 10C0 4.50107 4.43841 0.038857 9.92838 0.000268937C10.2758 -0.00217271 10.5995 0.175844 10.7836 0.470481ZM8.40989 2.15803C4.75344 2.8954 2 6.12619 2 10C2 14.4183 5.58172 18 10 18C12.587 18 14.8886 16.7721 16.3516 14.8648C11.6131 14.0789 8 9.96139 8 5.00001C8 4.01361 8.1431 3.05953 8.40989 2.15803Z" fill="currentColor"></path></svg> </button> </div> </div> </div> </div>  <script>
+  function initializeMobileNavigation() {
+    const drawer = document.getElementById("drawer");
+    const drawerButton = document.getElementById("header-drawer-button");
+
+    if (
+      !drawer ||
+      !drawerButton ||
+      drawer.dataset.mobileNavInitialized === "true"
+    ) {
+      return;
+    }
+
+    const navTrigger = drawer.querySelector("[data-mobile-nav-trigger]");
+    const navLabel = drawer.querySelector("[data-mobile-nav-label]");
+    const navChevron = drawer.querySelector("[data-mobile-nav-chevron]");
+    const navDropdown = drawer.querySelector("[data-mobile-nav-dropdown]");
+    const navOptionElements = Array.from(
+      drawer.querySelectorAll("[data-mobile-nav-option]")
+    );
+    const navLinkElements = Array.from(
+      drawer.querySelectorAll("[data-mobile-nav-link]")
+    );
+    const tabPanels = Array.from(
+      drawer.querySelectorAll("[data-mobile-nav-content]")
+    );
+
+    let dropdownOpen = false;
+    let activeTabId =
+      drawer.dataset.defaultTabId ||
+      navOptionElements.find((option) => option.dataset.selected === "true")
+        ?.dataset.tabId ||
+      tabPanels[0]?.getAttribute("data-tab-id") ||
+      navOptionElements[0]?.dataset.tabId ||
+      null;
+
+    const updateSelectedOption = (tabId) => {
+      let selectedLabel = "";
+
+      navOptionElements.forEach((option) => {
+        const isSelected = option.dataset.tabId === tabId;
+        option.dataset.selected = isSelected ? "true" : "false";
+        option.setAttribute("aria-selected", isSelected ? "true" : "false");
+
+        const indicator = option.querySelector(
+          "[data-mobile-nav-option-indicator]"
+        );
+        if (indicator instanceof HTMLElement) {
+          indicator.dataset.selected = isSelected ? "true" : "false";
+        }
+
+        if (isSelected && !selectedLabel) {
+          selectedLabel =
+            option.dataset.label || option.textContent?.trim() || "";
+        }
+      });
+
+      if (!selectedLabel && navOptionElements[0]) {
+        selectedLabel =
+          navOptionElements[0].dataset.label ||
+          navOptionElements[0].textContent?.trim() ||
+          "";
+      }
+
+      if (selectedLabel) {
+        if (navLabel instanceof HTMLElement) {
+          navLabel.textContent = selectedLabel;
+        }
+        if (navTrigger instanceof HTMLElement) {
+          navTrigger.setAttribute("title", selectedLabel);
+        }
+      }
+    };
+
+    const setDropdownState = (open) => {
+      dropdownOpen = open;
+
+      if (navTrigger instanceof HTMLButtonElement) {
+        navTrigger.setAttribute("aria-expanded", open ? "true" : "false");
+        navTrigger.dataset.open = open ? "true" : "false";
+      }
+
+      if (navChevron instanceof HTMLElement) {
+        navChevron.dataset.open = open ? "true" : "false";
+      }
+
+      if (navDropdown instanceof HTMLElement) {
+        navDropdown.dataset.open = open ? "true" : "false";
+        navDropdown.setAttribute("aria-hidden", open ? "false" : "true");
+
+        if (open) {
+          navDropdown.removeAttribute("hidden");
+        } else {
+          navDropdown.setAttribute("hidden", "true");
+        }
+      }
+    };
+
+    const closeDropdown = () => {
+      if (dropdownOpen) {
+        setDropdownState(false);
+      }
+    };
+
+    const focusSelectedOption = () => {
+      const selectedOption =
+        navOptionElements.find(
+          (option) => option.dataset.selected === "true"
+        ) || navOptionElements[0];
+
+      selectedOption?.focus();
+    };
+
+    const activateTab = (tabId) => {
+      if (!tabId) return;
+      activeTabId = tabId;
+      updateSelectedOption(tabId);
+
+      tabPanels.forEach((panel) => {
+        const isActive = panel.getAttribute("data-tab-id") === tabId;
+        if (isActive) {
+          panel.removeAttribute("hidden");
+        } else {
+          panel.setAttribute("hidden", "true");
+        }
+      });
+    };
+
+    const closeDrawer = () => {
+      closeDropdown();
+      drawer.classList.remove("open");
+      drawerButton.classList.remove("open");
+      drawerButton.setAttribute("aria-expanded", "false");
+    };
+
+    const openDrawer = () => {
+      drawer.classList.add("open");
+      drawerButton.classList.add("open");
+      drawerButton.setAttribute("aria-expanded", "true");
+      closeDropdown();
+      if (activeTabId) {
+        activateTab(activeTabId);
+      }
+    };
+
+    const toggleDrawer = () => {
+      if (drawer.classList.contains("open")) {
+        closeDrawer();
+      } else {
+        openDrawer();
+      }
+    };
+
+    const handleOptionSelection = (option) => {
+      const hasNav = option.dataset.hasNav === "true";
+      const href = option.dataset.href;
+      const tabId = option.dataset.tabId;
+
+      if (!tabId) {
+        closeDropdown();
+        return;
+      }
+
+      if (!hasNav && href) {
+        updateSelectedOption(tabId);
+        closeDropdown();
+        closeDrawer();
+        window.location.href = href;
+        return;
+      }
+
+      activateTab(tabId);
+      closeDropdown();
+      if (navTrigger instanceof HTMLButtonElement) {
+        navTrigger.focus();
+      }
+    };
+
+    const handleDocumentClick = (event) => {
+      if (!dropdownOpen) return;
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+
+      if (
+        navDropdown instanceof HTMLElement &&
+        navTrigger instanceof HTMLElement
+      ) {
+        if (!navDropdown.contains(target) && !navTrigger.contains(target)) {
+          closeDropdown();
+        }
+      } else if (!drawer.contains(target)) {
+        closeDropdown();
+      }
+    };
+
+    drawerButton.addEventListener("click", toggleDrawer);
+
+    if (navTrigger instanceof HTMLButtonElement) {
+      navTrigger.addEventListener("click", () => {
+        const willOpen = !dropdownOpen;
+        setDropdownState(willOpen);
+        if (willOpen) {
+          window.requestAnimationFrame(() => {
+            focusSelectedOption();
+          });
+        }
+      });
+
+      navTrigger.addEventListener("keydown", (event) => {
+        if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+          event.preventDefault();
+          if (!dropdownOpen) {
+            setDropdownState(true);
+          }
+          window.requestAnimationFrame(() => {
+            focusSelectedOption();
+          });
+        } else if (
+          event.key === "Enter" ||
+          event.key === " " ||
+          event.key === "Space" ||
+          event.key === "Spacebar"
+        ) {
+          event.preventDefault();
+          const willOpen = !dropdownOpen;
+          setDropdownState(willOpen);
+          if (willOpen) {
+            window.requestAnimationFrame(() => {
+              focusSelectedOption();
+            });
+          }
+        } else if (event.key === "Escape" && dropdownOpen) {
+          event.preventDefault();
+          closeDropdown();
+        }
+      });
+    }
+
+    navOptionElements.forEach((option) => {
+      option.addEventListener("click", () => {
+        handleOptionSelection(option);
+      });
+
+      option.addEventListener("keydown", (event) => {
+        if (!navOptionElements.length) return;
+
+        const currentIndex = navOptionElements.indexOf(option);
+
+        if (event.key === "ArrowDown") {
+          event.preventDefault();
+          const nextIndex = (currentIndex + 1) % navOptionElements.length;
+          navOptionElements[nextIndex]?.focus();
+        } else if (event.key === "ArrowUp") {
+          event.preventDefault();
+          const prevIndex =
+            (currentIndex - 1 + navOptionElements.length) %
+            navOptionElements.length;
+          navOptionElements[prevIndex]?.focus();
+        } else if (event.key === "Home") {
+          event.preventDefault();
+          navOptionElements[0]?.focus();
+        } else if (event.key === "End") {
+          event.preventDefault();
+          navOptionElements[navOptionElements.length - 1]?.focus();
+        } else if (
+          event.key === "Enter" ||
+          event.key === " " ||
+          event.key === "Space" ||
+          event.key === "Spacebar"
+        ) {
+          event.preventDefault();
+          handleOptionSelection(option);
+        } else if (event.key === "Escape") {
+          event.preventDefault();
+          closeDropdown();
+          if (navTrigger instanceof HTMLButtonElement) {
+            navTrigger.focus();
+          }
+        } else if (event.key === "Tab") {
+          closeDropdown();
+        }
+      });
+    });
+
+    document.addEventListener("click", handleDocumentClick);
+
+    navLinkElements.forEach((link) => {
+      link.addEventListener("click", () => {
+        closeDrawer();
+      });
+    });
+
+    const mobileSearch = drawer.querySelector("[data-mobile-search]");
+    mobileSearch?.addEventListener("click", (event) => {
+      const target = event.target;
+      if (target instanceof Element) {
+        const anchor = target.closest("a[href]");
+        if (anchor) {
+          closeDrawer();
+        }
+      }
+    });
+
+    mobileSearch?.addEventListener("focusin", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement) || target.type !== "text") {
+        return;
+      }
+      closeDrawer();
+      window.requestAnimationFrame(() => {
+        if (document.activeElement === target) {
+          target.blur();
+        }
+        document.dispatchEvent(
+          new CustomEvent("header:open-search", {
+            detail: {
+              trigger: target,
+              variant: "mobile",
+            },
+          })
+        );
+      });
+    });
+
+    drawer.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        if (dropdownOpen) {
+          event.stopPropagation();
+          closeDropdown();
+          if (navTrigger instanceof HTMLButtonElement) {
+            navTrigger.focus();
+          }
+          return;
+        }
+
+        closeDrawer();
+        drawerButton.focus();
+      }
+    });
+
+    drawer.dataset.mobileNavInitialized = "true";
+    if (activeTabId) {
+      activateTab(activeTabId);
+    } else if (navOptionElements[0]?.dataset.tabId) {
+      updateSelectedOption(navOptionElements[0].dataset.tabId);
+    }
+  }
+
+  function initializeHeaderSearch() {
+    const overlay = document.getElementById("header-search-overlay");
+    const searchButtons = Array.from(
+      document.querySelectorAll("[data-header-search-button]")
+    );
+
+    if (!overlay || overlay.dataset.searchInitialized === "true") {
+      return;
+    }
+
+    const closeButtons = overlay.querySelectorAll("[data-header-search-close]");
+    const dismissTarget = overlay.querySelector("[data-header-search-dismiss]");
+    const panel = overlay.querySelector("[data-header-search-panel]");
+    const overlayMobileClass = "header-search-overlay--mobile";
+    const panelMobileClass = "header-search-panel--mobile";
+    let lastTrigger = null;
+    let lastVariant = null;
+
+    const setExpandedState = (isOpen) => {
+      const expanded = isOpen ? "true" : "false";
+      searchButtons.forEach((button) => {
+        button.setAttribute("aria-expanded", expanded);
+        button.setAttribute("data-active", expanded);
+      });
+      overlay.dataset.open = expanded;
+      overlay.setAttribute("aria-hidden", isOpen ? "false" : "true");
+    };
+
+    const focusSearchInput = () => {
+      window.requestAnimationFrame(() => {
+        const input = overlay.querySelector(
+          '[data-pagefind-ui] input[type="text"]'
+        );
+        if (input) {
+          input.focus();
+          input.select();
+        }
+      });
+    };
+
+    const openOverlay = (trigger, options = {}) => {
+      lastTrigger = trigger ?? document.activeElement;
+      const variant = options.variant ?? null;
+      lastVariant = typeof variant === "string" ? variant : null;
+      overlay.classList.remove("hidden");
+      overlay.classList.add("flex");
+      const isMobileVariant = lastVariant === "mobile";
+      if (isMobileVariant) {
+        overlay.dataset.variant = "mobile";
+      } else {
+        delete overlay.dataset.variant;
+      }
+      overlay.classList.toggle(overlayMobileClass, isMobileVariant);
+      panel?.classList.toggle(panelMobileClass, isMobileVariant);
+      document.documentElement.classList.add("has-header-search-open");
+      setExpandedState(true);
+      focusSearchInput();
+    };
+
+    const closeOverlay = () => {
+      overlay.classList.add("hidden");
+      overlay.classList.remove("flex");
+      document.documentElement.classList.remove("has-header-search-open");
+      overlay.classList.remove(overlayMobileClass);
+      panel?.classList.remove(panelMobileClass);
+      delete overlay.dataset.variant;
+      setExpandedState(false);
+      if (lastTrigger instanceof HTMLElement) {
+        if (
+          lastVariant === "mobile" &&
+          typeof lastTrigger.blur === "function"
+        ) {
+          lastTrigger.blur();
+        } else if (lastVariant !== "mobile") {
+          lastTrigger.focus();
+        }
+      }
+      lastTrigger = null;
+      lastVariant = null;
+    };
+
+    searchButtons.forEach((button) => {
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        openOverlay(button);
+      });
+    });
+
+    closeButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        closeOverlay();
+      });
+    });
+
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) {
+        closeOverlay();
+      }
+    });
+
+    dismissTarget?.addEventListener("click", closeOverlay);
+
+    const handleKeydown = (event) => {
+      const key = "key" in event ? event.key : undefined;
+      const isShortcut =
+        !!key && key.toLowerCase() === "k" && (event.metaKey || event.ctrlKey);
+
+      if (isShortcut) {
+        event.preventDefault();
+        openOverlay(searchButtons[0] ?? null);
+        return;
+      }
+
+      if (key === "Escape" && overlay.dataset.open === "true") {
+        event.preventDefault();
+        closeOverlay();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeydown);
+
+    document.addEventListener("header:open-search", (event) => {
+      const detail =
+        event instanceof CustomEvent && typeof event.detail === "object"
+          ? event.detail
+          : {};
+      const trigger =
+        detail && detail.trigger instanceof HTMLElement ? detail.trigger : null;
+      openOverlay(trigger, detail);
+    });
+
+    document.addEventListener("astro:before-swap", () => {
+      if (overlay.dataset.open === "true") {
+        closeOverlay();
+      }
+    });
+
+    overlay.dataset.searchInitialized = "true";
+  }
+
+  const handleAfterSwap = () => {
+    initializeMobileNavigation();
+    initializeHeaderSearch();
+  };
+
+  document.addEventListener("astro:after-swap", handleAfterSwap);
+  handleAfterSwap();
+</script> <div class="flex pt-8"> <div class="hidden md:flex md:flex-col w-[240px] px-6 pb-6 pt-6 md:fixed md:top-16 md:bottom-0" data-left-nav-container data-astro-cid-73gi4scu><nav aria-label="Breadcrumb" class="px-3 mb-4 text-xs text-gray-500 dark:text-gray-400" data-astro-cid-73gi4scu><ol class="flex items-center gap-0.5 whitespace-nowrap overflow-x-auto text-[12px] tracking-tight" data-astro-cid-73gi4scu><li class="flex items-center gap-0.5" data-astro-cid-73gi4scu><a href="/chatgpt" class="transition-colors hover:text-gray-900 dark:hover:text-gray-100" data-astro-cid-73gi4scu>ChatGPT</a></li><li class="flex items-center gap-0.5" data-astro-cid-73gi4scu><span class="text-gray-400 dark:text-gray-600" aria-hidden="true" data-astro-cid-73gi4scu>
+&gt;
+</span><a href="/apps-sdk" class="transition-colors hover:text-gray-900 dark:hover:text-gray-100" data-astro-cid-73gi4scu>Apps SDK</a></li></ol></nav><nav class="mt-4 flex-1 overflow-y-auto overflow-x-visible" data-left-nav data-left-nav-id="/apps-sdk" data-astro-cid-73gi4scu><div data-astro-cid-73gi4scu><ul class="flex flex-col gap-0.5 text-sm text-gray-600 dark:text-gray-300 w-full" data-astro-cid-73gi4scu><li data-astro-cid-73gi4scu><a href="/apps-sdk" class="px-3 py-2 w-full rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-astro-cid-73gi4scu>Home</a></li></ul></div><div data-astro-cid-73gi4scu><h3 class="mb-3 ml-3 mt-8 text-xs text-gray-500 dark:text-gray-400" data-astro-cid-73gi4scu>Core Concepts</h3><ul class="flex flex-col gap-0.5 text-sm text-gray-600 dark:text-gray-300 w-full" data-astro-cid-73gi4scu><li data-astro-cid-73gi4scu><a href="/apps-sdk/concepts/mcp-server" class="px-3 py-2 w-full rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-astro-cid-73gi4scu>MCP Server</a></li><li data-astro-cid-73gi4scu><a href="/apps-sdk/concepts/user-interaction" class="px-3 py-2 w-full rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-astro-cid-73gi4scu>User interaction</a></li><li data-astro-cid-73gi4scu><a href="/apps-sdk/concepts/design-guidelines" class="px-3 py-2 w-full rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-astro-cid-73gi4scu>Design guidelines</a></li></ul></div><div data-astro-cid-73gi4scu><h3 class="mb-3 ml-3 mt-8 text-xs text-gray-500 dark:text-gray-400" data-astro-cid-73gi4scu>Plan</h3><ul class="flex flex-col gap-0.5 text-sm text-gray-600 dark:text-gray-300 w-full" data-astro-cid-73gi4scu><li data-astro-cid-73gi4scu><a href="/apps-sdk/plan/use-case" class="px-3 py-2 w-full rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-astro-cid-73gi4scu>Research use cases</a></li><li data-astro-cid-73gi4scu><a href="/apps-sdk/plan/tools" class="px-3 py-2 w-full rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-astro-cid-73gi4scu>Define tools</a></li><li data-astro-cid-73gi4scu><a href="/apps-sdk/plan/components" class="px-3 py-2 w-full rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-astro-cid-73gi4scu>Design components</a></li></ul></div><div data-astro-cid-73gi4scu><h3 class="mb-3 ml-3 mt-8 text-xs text-gray-500 dark:text-gray-400" data-astro-cid-73gi4scu>Build</h3><ul class="flex flex-col gap-0.5 text-sm text-gray-600 dark:text-gray-300 w-full" data-astro-cid-73gi4scu><li data-astro-cid-73gi4scu><a href="/apps-sdk/build/mcp-server" class="px-3 py-2 w-full rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-astro-cid-73gi4scu>Set up your server</a></li><li data-astro-cid-73gi4scu><a href="/apps-sdk/build/custom-ux" class="px-3 py-2 w-full rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-astro-cid-73gi4scu>Build a custom UX</a></li><li data-astro-cid-73gi4scu><a href="/apps-sdk/build/auth" class="px-3 py-2 w-full rounded-lg transition-colors block text-gray-900 bg-gray-100 dark:text-white dark:bg-gray-800 " data-astro-cid-73gi4scu>Authenticate users</a></li><li data-astro-cid-73gi4scu><a href="/apps-sdk/build/storage" class="px-3 py-2 w-full rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-astro-cid-73gi4scu>Persist state</a></li><li data-astro-cid-73gi4scu><a href="/apps-sdk/build/examples" class="px-3 py-2 w-full rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-astro-cid-73gi4scu>Examples</a></li></ul></div><div data-astro-cid-73gi4scu><h3 class="mb-3 ml-3 mt-8 text-xs text-gray-500 dark:text-gray-400" data-astro-cid-73gi4scu>Deploy</h3><ul class="flex flex-col gap-0.5 text-sm text-gray-600 dark:text-gray-300 w-full" data-astro-cid-73gi4scu><li data-astro-cid-73gi4scu><a href="/apps-sdk/deploy" class="px-3 py-2 w-full rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-astro-cid-73gi4scu>Deploy your app</a></li><li data-astro-cid-73gi4scu><a href="/apps-sdk/deploy/connect-chatgpt" class="px-3 py-2 w-full rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-astro-cid-73gi4scu>Connect from ChatGPT</a></li><li data-astro-cid-73gi4scu><a href="/apps-sdk/deploy/testing" class="px-3 py-2 w-full rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-astro-cid-73gi4scu>Test your integration</a></li></ul></div><div data-astro-cid-73gi4scu><h3 class="mb-3 ml-3 mt-8 text-xs text-gray-500 dark:text-gray-400" data-astro-cid-73gi4scu>Guides</h3><ul class="flex flex-col gap-0.5 text-sm text-gray-600 dark:text-gray-300 w-full" data-astro-cid-73gi4scu><li data-astro-cid-73gi4scu><a href="/apps-sdk/guides/optimize-metadata" class="px-3 py-2 w-full rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-astro-cid-73gi4scu>Optimize Metadata</a></li><li data-astro-cid-73gi4scu><a href="/apps-sdk/guides/security-privacy" class="px-3 py-2 w-full rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-astro-cid-73gi4scu>Security &amp; Privacy</a></li><li data-astro-cid-73gi4scu><a href="/apps-sdk/deploy/troubleshooting" class="px-3 py-2 w-full rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-astro-cid-73gi4scu>Troubleshooting</a></li></ul></div><div data-astro-cid-73gi4scu><h3 class="mb-3 ml-3 mt-8 text-xs text-gray-500 dark:text-gray-400" data-astro-cid-73gi4scu>Resources</h3><ul class="flex flex-col gap-0.5 text-sm text-gray-600 dark:text-gray-300 w-full" data-astro-cid-73gi4scu><li data-astro-cid-73gi4scu><a href="/apps-sdk/reference" class="px-3 py-2 w-full rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-astro-cid-73gi4scu>Reference</a></li><li data-astro-cid-73gi4scu><a href="/apps-sdk/app-developer-guidelines" class="px-3 py-2 w-full rounded-lg transition-colors block hover:text-gray-900 hover:bg-gray-50 dark:hover:text-gray-100 dark:hover:bg-gray-900 " data-astro-cid-73gi4scu>App developer guidelines</a></li></ul></div></nav></div><script>
+  const NAV_SELECTOR = "nav[data-left-nav]";
+  const STORAGE_PREFIX = "left-nav-scroll:";
+  const INITIALIZED_ATTRIBUTE = "data-left-nav-scroll-initialized";
+
+  const isStorageAvailable = (() => {
+    try {
+      const storageKey = `${STORAGE_PREFIX}__test__`;
+      sessionStorage.setItem(storageKey, "1");
+      sessionStorage.removeItem(storageKey);
+      return true;
+    } catch (error) {
+      return false;
+    }
+  })();
+
+  const getNav = () => document.querySelector(NAV_SELECTOR);
+
+  const getStorageKey = (nav) =>
+    `${STORAGE_PREFIX}${nav.dataset.leftNavId ?? "default"}`;
+
+  const restoreScrollPosition = (nav) => {
+    if (!isStorageAvailable) return;
+    const storedValue = sessionStorage.getItem(getStorageKey(nav));
+    if (storedValue !== null) {
+      nav.scrollTop = Number(storedValue);
+    }
+  };
+
+  const saveScrollPosition = (nav) => {
+    if (!isStorageAvailable) return;
+    sessionStorage.setItem(getStorageKey(nav), String(nav.scrollTop));
+  };
+
+  const setupNav = () => {
+    const nav = getNav();
+    if (!nav || nav.getAttribute(INITIALIZED_ATTRIBUTE) === "true") return;
+
+    restoreScrollPosition(nav);
+
+    nav.addEventListener(
+      "scroll",
+      () => {
+        saveScrollPosition(nav);
+      },
+      { passive: true }
+    );
+
+    nav.setAttribute(INITIALIZED_ATTRIBUTE, "true");
+  };
+
+  const persistScrollPosition = () => {
+    const nav = getNav();
+    if (!nav) return;
+    saveScrollPosition(nav);
+  };
+
+  const initialize = () => {
+    setupNav();
+    const nav = getNav();
+    if (!nav) return;
+    restoreScrollPosition(nav);
+  };
+
+  window.addEventListener("pageshow", initialize);
+  document.addEventListener("astro:page-load", initialize);
+  document.addEventListener("astro:after-swap", initialize);
+
+  document.addEventListener("astro:before-swap", persistScrollPosition);
+  window.addEventListener("beforeunload", persistScrollPosition);
+
+  initialize();
+</script> <main class="flex-1 md:pl-[240px]">  <div class="px-4 py-12 mx-4 sm:mx-8 md:mx-auto md:max-w-6xl md:w-full"> <div class="mx-auto max-w-7xl md:w-full grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_200px] gap-12"> <style>astro-island,astro-slot,astro-static-slot{display:contents}</style><script>(()=>{var e=async t=>{await(await t())()};(self.Astro||(self.Astro={})).load=e;window.dispatchEvent(new Event("astro:load"));})();</script><script>(()=>{var A=Object.defineProperty;var g=(i,o,a)=>o in i?A(i,o,{enumerable:!0,configurable:!0,writable:!0,value:a}):i[o]=a;var d=(i,o,a)=>g(i,typeof o!="symbol"?o+"":o,a);{let i={0:t=>m(t),1:t=>a(t),2:t=>new RegExp(t),3:t=>new Date(t),4:t=>new Map(a(t)),5:t=>new Set(a(t)),6:t=>BigInt(t),7:t=>new URL(t),8:t=>new Uint8Array(t),9:t=>new Uint16Array(t),10:t=>new Uint32Array(t),11:t=>1/0*t},o=t=>{let[l,e]=t;return l in i?i[l](e):void 0},a=t=>t.map(o),m=t=>typeof t!="object"||t===null?t:Object.fromEntries(Object.entries(t).map(([l,e])=>[l,o(e)]));class y extends HTMLElement{constructor(){super(...arguments);d(this,"Component");d(this,"hydrator");d(this,"hydrate",async()=>{var b;if(!this.hydrator||!this.isConnected)return;let e=(b=this.parentElement)==null?void 0:b.closest("astro-island[ssr]");if(e){e.addEventListener("astro:hydrate",this.hydrate,{once:!0});return}let c=this.querySelectorAll("astro-slot"),n={},h=this.querySelectorAll("template[data-astro-template]");for(let r of h){let s=r.closest(this.tagName);s!=null&&s.isSameNode(this)&&(n[r.getAttribute("data-astro-template")||"default"]=r.innerHTML,r.remove())}for(let r of c){let s=r.closest(this.tagName);s!=null&&s.isSameNode(this)&&(n[r.getAttribute("name")||"default"]=r.innerHTML)}let p;try{p=this.hasAttribute("props")?m(JSON.parse(this.getAttribute("props"))):{}}catch(r){let s=this.getAttribute("component-url")||"<unknown>",v=this.getAttribute("component-export");throw v&&(s+=` (export ${v})`),console.error(`[hydrate] Error parsing props for component ${s}`,this.getAttribute("props"),r),r}let u;await this.hydrator(this)(this.Component,p,n,{client:this.getAttribute("client")}),this.removeAttribute("ssr"),this.dispatchEvent(new CustomEvent("astro:hydrate"))});d(this,"unmount",()=>{this.isConnected||this.dispatchEvent(new CustomEvent("astro:unmount"))})}disconnectedCallback(){document.removeEventListener("astro:after-swap",this.unmount),document.addEventListener("astro:after-swap",this.unmount,{once:!0})}connectedCallback(){if(!this.hasAttribute("await-children")||document.readyState==="interactive"||document.readyState==="complete")this.childrenConnectedCallback();else{let e=()=>{document.removeEventListener("DOMContentLoaded",e),c.disconnect(),this.childrenConnectedCallback()},c=new MutationObserver(()=>{var n;((n=this.lastChild)==null?void 0:n.nodeType)===Node.COMMENT_NODE&&this.lastChild.nodeValue==="astro:end"&&(this.lastChild.remove(),e())});c.observe(this,{childList:!0}),document.addEventListener("DOMContentLoaded",e)}}async childrenConnectedCallback(){let e=this.getAttribute("before-hydration-url");e&&await import(e),this.start()}async start(){let e=JSON.parse(this.getAttribute("opts")),c=this.getAttribute("client");if(Astro[c]===void 0){window.addEventListener(`astro:${c}`,()=>this.start(),{once:!0});return}try{await Astro[c](async()=>{let n=this.getAttribute("renderer-url"),[h,{default:p}]=await Promise.all([import(this.getAttribute("component-url")),n?import(n):()=>()=>{}]),u=this.getAttribute("component-export")||"default";if(!u.includes("."))this.Component=h[u];else{this.Component=h;for(let f of u.split("."))this.Component=this.Component[f]}return this.hydrator=p,this.hydrate},e,this)}catch(n){console.error(`[astro-island] Error hydrating ${this.getAttribute("component-url")}`,n)}}attributeChangedCallback(){this.hydrate()}}d(y,"observedAttributes",["props"]),customElements.get("astro-island")||customElements.define("astro-island",y)}})();</script><script>window._$HY||(e=>{let t=e=>e&&e.hasAttribute&&(e.hasAttribute("data-hk")?e:t(e.host&&e.host.nodeType?e.host:e.parentNode));["click", "input"].forEach((o=>document.addEventListener(o,(o=>{if(!e.events)return;let s=t(o.composedPath&&o.composedPath()[0]||o.target);s&&!e.completed.has(s)&&e.events.push([s,o])}))))})(_$HY={events:[],completed:new WeakSet,r:{},fe(){}});</script><!--xs--><astro-island uid="e3Yfd" data-solid-render-id="s0" component-url="/_astro/TableOfContents.LN7GcmNM.js" component-export="default" renderer-url="/_astro/client.BzL3K439.js" props="{}" ssr client="load" opts="{&quot;name&quot;:&quot;TableOfContents&quot;,&quot;value&quot;:true}" await-children><nav data-hk=s00000 class="hidden xl:block fixed top-24 right-8 w-[200px] max-h-[calc(100vh-6rem)] overflow-y-auto"><div class="relative"><div class="absolute left-0 top-0 bottom-0 w-[2.15px] bg-gray-100 dark:bg-gray-700"></div><div class="absolute left-0 w-[2.15px] bg-gray-700 dark:bg-gray-200 transition-transform duration-200 ease-out" style="transform:translateY(0);height:0px"></div><ul class="relative list-none p-0 m-0 ml-3 space-y-3 font-medium"></ul></div></nav><!--astro:end--></astro-island> <!-- MAIN --> <div class="space-y-12"> <div class="space-y-10"> <!-- Title + tagline --> <header class="space-y-4 pt-10 text-center"> <h1 class="text-5xl md:text-5xl font-medium tracking-tight text-gray-900 dark:text-white"> Authentication </h1> <p class="mx-auto max-w-3xl md:text-xl text-gray-500 dark:text-gray-400 leading-relaxed"> Authentication patterns for Apps SDK apps. </p> </header>  </div> <!-- Content --> <article class="prose prose-lg max-w-none pt-4" id="track-content"> <h2 id="authenticate-your-users">Authenticate your users</h2>
+<p>Many Apps SDK apps can operate in a read-only, anonymous mode, but anything that exposes customer-specific data or write actions should authenticate users.</p>
+<p>You can integrate with your own authorization server when you need to connect to an existing backend or share data between users.</p>
+<h2 id="custom-auth-with-oauth-21">Custom auth with OAuth 2.1</h2>
+<p>When you need to talk to an external system—CRM records, proprietary APIs, shared datasets—you can integrate a full OAuth 2.1 flow that conforms to the <a href="https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization">MCP authorization spec</a>.</p>
+<h3 id="components">Components</h3>
+<ul>
+<li><strong>Resource server</strong> – your MCP server, which exposes tools and verifies access tokens on each request.</li>
+<li><strong>Authorization server</strong> – your identity provider (Auth0, Okta, Cognito, or a custom implementation) that issues tokens and publishes discovery metadata.</li>
+<li><strong>Client</strong> – ChatGPT acting on behalf of the user. It supports dynamic client registration and PKCE.</li>
+</ul>
+<h3 id="required-endpoints">Required endpoints</h3>
+<p>Your authorization server must expose the discovery metadata described in the MCP authorization spec so the ChatGPT client can locate the OAuth endpoints at runtime:</p>
+<ul>
+<li><a href="https://modelcontextprotocol.io/specification/draft/basic/authorization#authorization-server-metadata-discovery">Authorization server metadata discovery</a> spells out the required discovery document (authorization, token, registration, JWKs, etc.).</li>
+<li><a href="https://modelcontextprotocol.io/specification/draft/basic/authorization#authorization-server-location">Authorization server location</a> defines where that document must be hosted and how the client resolves it from your protected resource metadata.</li>
+</ul>
+<h3 id="flow-in-practice">Flow in practice</h3>
+<ol>
+<li>ChatGPT queries your MCP server for protected resource metadata. You can configure this with <code>AuthSettings</code> in the official Python SDK’s FastMCP module.</li>
+<li>ChatGPT registers itself with your authorization server using the <code>registration_endpoint</code> and obtains a <code>client_id</code>.</li>
+<li>When the user first invokes a tool, the ChatGPT client launches the OAuth authorization code + PKCE flow. The user authenticates and consents to the requested scopes.</li>
+<li>ChatGPT exchanges the authorization code for an access token and attaches it to subsequent MCP requests (<code>Authorization: Bearer &lt;token&gt;</code>).</li>
+<li>Your server verifies the token on each request (issuer, audience, expiration, scopes) before executing the tool.</li>
+</ol>
+<h3 id="client-identification-roadmap">Client identification roadmap</h3>
+<p>A frequent question is how your MCP server can confirm that a request actually comes from ChatGPT. Today the MCP spec relies on dynamic client registration (DCR): ChatGPT registers a new OAuth client when it connects, exchanges that <code>client_id</code> during token issuance, and your authorization server uses the resulting record to identify the caller. This satisfies the current spec, but providers such as Auth0 or Okta may end up managing thousands of short-lived clients—sometimes one per user session—which strains dashboards and complicates lifecycle management.</p>
+<p>To provide a durable identity signal, the MCP council is advancing <a href="https://blog.modelcontextprotocol.io/posts/client_registration/">Client Metadata Documents (CMID)</a>. Instead of provisioning per-session clients, ChatGPT will publish a document such as <code>https://openai.com/chatgpt.json</code> describing its OAuth configuration. Your authorization server can fetch that document over HTTPS, treat it as a stable client identifier, and enforce policies (allowed redirect URIs, scopes, rate limits) while also verifying that the caller is OpenAI.</p>
+<p>CMID remains in draft, so continue supporting today’s dynamic registration model until the specification freezes and production-grade implementations are broadly available.</p>
+<h3 id="implementing-verification">Implementing verification</h3>
+<p>The official Python SDK’s FastMCP module ships with helpers for token verification. A simplified example:</p>
+<p>File: <code>server.py</code></p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8;overflow-x:auto" tabindex="0" data-language="python"><code><span class="line"><span style="color:#F97583">from</span><span style="color:#E1E4E8"> mcp.server.fastmcp </span><span style="color:#F97583">import</span><span style="color:#E1E4E8"> FastMCP</span></span>
+<span class="line"><span style="color:#F97583">from</span><span style="color:#E1E4E8"> mcp.server.auth.settings </span><span style="color:#F97583">import</span><span style="color:#E1E4E8"> AuthSettings</span></span>
+<span class="line"><span style="color:#F97583">from</span><span style="color:#E1E4E8"> mcp.server.auth.provider </span><span style="color:#F97583">import</span><span style="color:#E1E4E8"> TokenVerifier, AccessToken</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">class</span><span style="color:#B392F0"> MyVerifier</span><span style="color:#E1E4E8">(</span><span style="color:#B392F0">TokenVerifier</span><span style="color:#E1E4E8">):</span></span>
+<span class="line"><span style="color:#F97583">    async</span><span style="color:#F97583"> def</span><span style="color:#B392F0"> verify_token</span><span style="color:#E1E4E8">(self, token: </span><span style="color:#79B8FF">str</span><span style="color:#E1E4E8">) -&gt; AccessToken </span><span style="color:#F97583">|</span><span style="color:#79B8FF"> None</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">        payload </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> validate_jwt(token, jwks_url)</span></span>
+<span class="line"><span style="color:#F97583">        if</span><span style="color:#9ECBFF"> &quot;user&quot;</span><span style="color:#F97583"> not</span><span style="color:#F97583"> in</span><span style="color:#E1E4E8"> payload.get(</span><span style="color:#9ECBFF">&quot;permissions&quot;</span><span style="color:#E1E4E8">, []):</span></span>
+<span class="line"><span style="color:#F97583">            return</span><span style="color:#79B8FF"> None</span></span>
+<span class="line"><span style="color:#F97583">        return</span><span style="color:#E1E4E8"> AccessToken(</span></span>
+<span class="line"><span style="color:#FFAB70">            token</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">token,</span></span>
+<span class="line"><span style="color:#FFAB70">            client_id</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">payload[</span><span style="color:#9ECBFF">&quot;azp&quot;</span><span style="color:#E1E4E8">],</span></span>
+<span class="line"><span style="color:#FFAB70">            subject</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">payload[</span><span style="color:#9ECBFF">&quot;sub&quot;</span><span style="color:#E1E4E8">],</span></span>
+<span class="line"><span style="color:#FFAB70">            scopes</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">payload.get(</span><span style="color:#9ECBFF">&quot;permissions&quot;</span><span style="color:#E1E4E8">, []),</span></span>
+<span class="line"><span style="color:#FFAB70">            claims</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">payload,</span></span>
+<span class="line"><span style="color:#E1E4E8">        )</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">mcp </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> FastMCP(</span></span>
+<span class="line"><span style="color:#FFAB70">    name</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">&quot;kanban-mcp&quot;</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#FFAB70">    stateless_http</span><span style="color:#F97583">=</span><span style="color:#79B8FF">True</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#FFAB70">    token_verifier</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">MyVerifier(),</span></span>
+<span class="line"><span style="color:#FFAB70">    auth</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">AuthSettings(</span></span>
+<span class="line"><span style="color:#FFAB70">        issuer_url</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">&quot;https://your-tenant.us.auth0.com&quot;</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#FFAB70">        resource_server_url</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">&quot;https://example.com/mcp&quot;</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#FFAB70">        required_scopes</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">[</span><span style="color:#9ECBFF">&quot;user&quot;</span><span style="color:#E1E4E8">],</span></span>
+<span class="line"><span style="color:#E1E4E8">    ),</span></span>
+<span class="line"><span style="color:#E1E4E8">)</span></span></code></pre>
+<p>If verification fails, respond with <code>401 Unauthorized</code> and a <code>WWW-Authenticate</code> header that points back to your protected-resource metadata. This tells the client to run the OAuth flow again.</p>
+<h3 id="choosing-an-authorization-provider">Choosing an authorization provider</h3>
+<p><a href="https://auth0.com/">Auth0</a> is a popular option and supports dynamic client registration, RBAC, and token introspection out of the box. To configure it:</p>
+<ol>
+<li>Create an API in the Auth0 dashboard and record the identifier (used as the token audience).</li>
+<li>Enable RBAC and add permissions (for example <code>user</code>) so they are embedded in the access token.</li>
+<li>Turn on OIDC dynamic application registration so ChatGPT can create a client per connector.</li>
+<li>Ensure at least one login connection is enabled for dynamically created clients so users can sign in.</li>
+</ol>
+<p>Okta, Azure AD, and custom OAuth 2.1 servers can follow the same pattern as long as they expose the required metadata.</p>
+<h2 id="testing-and-rollout">Testing and rollout</h2>
+<ul>
+<li><strong>Local testing</strong> – start with a development tenant that issues short-lived tokens so you can iterate quickly.</li>
+<li><strong>Dogfood</strong> – once authentication works, gate access to trusted testers before rolling out broadly. You can require linking for specific tools or the entire connector.</li>
+<li><strong>Rotation</strong> – plan for token revocation, refresh, and scope changes. Your server should treat missing or stale tokens as unauthenticated and return a helpful error message.</li>
+</ul>
+<p>With authentication in place you can confidently expose user-specific data and write actions to ChatGPT users.</p>
+<h2 id="client-identification">Client identification</h2>
+<p>If your MCP server is authenticated, then a user login is always required. ChatGPT does <strong>not</strong> support machine-to-machine OAuth flows such as client credentials, service accounts, or JWT bearer assertions. The client cannot present custom API keys, sign mutual TLS handshakes, or operate without an interactive user session. Requests to your MCP server always originate from a ChatGPT user session and should be treated accordingly.</p>
+<p>If you need to ensure that only ChatGPT can reach a server-to-server endpoint, rely on network-level controls rather than new credential types. Today the supported option is to allowlist ChatGPT’s egress IP addresses, which match the ranges already published for ChatGPT actions.</p>
+<p>Once rolled out, CMID directly addresses the client identification problem by giving you a signed, HTTPS-hosted declaration of ChatGPT’s identity. CMID eliminates the churn of dynamic registration, clarifies “which service is this?”, and gives you a consistent way to recognize ChatGPT traffic.</p>
+<h2 id="pertool-authentication-with-securityschemes">Per‑tool authentication with <code>securitySchemes</code></h2>
+<p>Different tools often have different access requirements. Listing tools without auth improves discovery and developer ergonomics, but you should enforce authentication at call time for any tool that needs it. Declaring the requirement in metadata helps clients guide the user, while your server remains the source of truth for enforcement.</p>
+<p>Our recommendation is to:</p>
+<ul>
+<li>Keep your server discoverable (no auth required for listing)</li>
+<li>Enforce auth per tool call</li>
+</ul>
+<p>Scope and semantics:</p>
+<ul>
+<li>Supported scheme types (initial):
+<ul>
+<li>“noauth” — callable anonymously</li>
+<li>“oauth2” — requires OAuth 2.0; optional scopes</li>
+</ul>
+</li>
+<li>Missing field: inherit the server default policy</li>
+<li>Both “noauth” and “oauth2”: anonymous works, but authenticating in will unlock more behavior</li>
+<li>Servers must enforce regardless of client hints</li>
+</ul>
+<p>You should declare auth requirements in the first-class <code>securitySchemes</code> field on each tool. Clients use this to guide users; your server must still validate tokens/scopes on every invocation.</p>
+<p>Example (public + optional auth) – TypeScript SDK</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8;overflow-x:auto" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> { McpServer } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> &quot;@modelcontextprotocol/sdk/server/mcp.js&quot;</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> { z } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> &quot;zod&quot;</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">declare</span><span style="color:#F97583"> const</span><span style="color:#79B8FF"> server</span><span style="color:#F97583">:</span><span style="color:#B392F0"> McpServer</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">server.</span><span style="color:#B392F0">registerTool</span><span style="color:#E1E4E8">(</span></span>
+<span class="line"><span style="color:#9ECBFF">  &quot;search&quot;</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  {</span></span>
+<span class="line"><span style="color:#E1E4E8">    title: </span><span style="color:#9ECBFF">&quot;Public Search&quot;</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">    description: </span><span style="color:#9ECBFF">&quot;Search public documents.&quot;</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">    inputSchema: {</span></span>
+<span class="line"><span style="color:#E1E4E8">      type: </span><span style="color:#9ECBFF">&quot;object&quot;</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">      properties: { q: { type: </span><span style="color:#9ECBFF">&quot;string&quot;</span><span style="color:#E1E4E8"> } },</span></span>
+<span class="line"><span style="color:#E1E4E8">      required: [</span><span style="color:#9ECBFF">&quot;q&quot;</span><span style="color:#E1E4E8">],</span></span>
+<span class="line"><span style="color:#E1E4E8">    },</span></span>
+<span class="line"><span style="color:#E1E4E8">    securitySchemes: [</span></span>
+<span class="line"><span style="color:#E1E4E8">      { type: </span><span style="color:#9ECBFF">&quot;noauth&quot;</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">      { type: </span><span style="color:#9ECBFF">&quot;oauth2&quot;</span><span style="color:#E1E4E8">, scopes: [</span><span style="color:#9ECBFF">&quot;search.read&quot;</span><span style="color:#E1E4E8">] },</span></span>
+<span class="line"><span style="color:#E1E4E8">    ],</span></span>
+<span class="line"><span style="color:#E1E4E8">  },</span></span>
+<span class="line"><span style="color:#F97583">  async</span><span style="color:#E1E4E8"> ({ </span><span style="color:#FFAB70">input</span><span style="color:#E1E4E8"> }) </span><span style="color:#F97583">=&gt;</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">    return</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">      content: [{ type: </span><span style="color:#9ECBFF">&quot;text&quot;</span><span style="color:#E1E4E8">, text: </span><span style="color:#9ECBFF">`Results for ${</span><span style="color:#E1E4E8">input</span><span style="color:#9ECBFF">.</span><span style="color:#E1E4E8">q</span><span style="color:#9ECBFF">}`</span><span style="color:#E1E4E8"> }],</span></span>
+<span class="line"><span style="color:#E1E4E8">      structuredContent: {},</span></span>
+<span class="line"><span style="color:#E1E4E8">    };</span></span>
+<span class="line"><span style="color:#E1E4E8">  }</span></span>
+<span class="line"><span style="color:#E1E4E8">);</span></span></code></pre>
+<p>Example (auth required) – TypeScript SDK</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8;overflow-x:auto" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> { McpServer } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> &quot;@modelcontextprotocol/sdk/server/mcp.js&quot;</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> { z } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> &quot;zod&quot;</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">declare</span><span style="color:#F97583"> const</span><span style="color:#79B8FF"> server</span><span style="color:#F97583">:</span><span style="color:#B392F0"> McpServer</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">server.</span><span style="color:#B392F0">registerTool</span><span style="color:#E1E4E8">(</span></span>
+<span class="line"><span style="color:#9ECBFF">  &quot;create_doc&quot;</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  {</span></span>
+<span class="line"><span style="color:#E1E4E8">    title: </span><span style="color:#9ECBFF">&quot;Create Document&quot;</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">    description: </span><span style="color:#9ECBFF">&quot;Make a new doc in your account.&quot;</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">    inputSchema: {</span></span>
+<span class="line"><span style="color:#E1E4E8">      type: </span><span style="color:#9ECBFF">&quot;object&quot;</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">      properties: { title: { type: </span><span style="color:#9ECBFF">&quot;string&quot;</span><span style="color:#E1E4E8"> } },</span></span>
+<span class="line"><span style="color:#E1E4E8">      required: [</span><span style="color:#9ECBFF">&quot;title&quot;</span><span style="color:#E1E4E8">],</span></span>
+<span class="line"><span style="color:#E1E4E8">    },</span></span>
+<span class="line"><span style="color:#E1E4E8">    securitySchemes: [{ type: </span><span style="color:#9ECBFF">&quot;oauth2&quot;</span><span style="color:#E1E4E8">, scopes: [</span><span style="color:#9ECBFF">&quot;docs.write&quot;</span><span style="color:#E1E4E8">] }],</span></span>
+<span class="line"><span style="color:#E1E4E8">  },</span></span>
+<span class="line"><span style="color:#F97583">  async</span><span style="color:#E1E4E8"> ({ </span><span style="color:#FFAB70">input</span><span style="color:#E1E4E8"> }) </span><span style="color:#F97583">=&gt;</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">    return</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">      content: [{ type: </span><span style="color:#9ECBFF">&quot;text&quot;</span><span style="color:#E1E4E8">, text: </span><span style="color:#9ECBFF">`Created doc: ${</span><span style="color:#E1E4E8">input</span><span style="color:#9ECBFF">.</span><span style="color:#E1E4E8">title</span><span style="color:#9ECBFF">}`</span><span style="color:#E1E4E8"> }],</span></span>
+<span class="line"><span style="color:#E1E4E8">      structuredContent: {},</span></span>
+<span class="line"><span style="color:#E1E4E8">    };</span></span>
+<span class="line"><span style="color:#E1E4E8">  }</span></span>
+<span class="line"><span style="color:#E1E4E8">);</span></span></code></pre> </article> </div> <!-- Spacer for fixed TOC --> <div></div> </div> </div>    <nav class="px-2 md:px-8 lg:px-16 w-full mb-8"><div class="flex justify-between items-center"><a href="/apps-sdk/build/custom-ux" class="flex items-end gap-4"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-gray-800 dark:text-gray-200 mb-1 " ><path d="M3 12C3 11.7348 3.10536 11.4804 3.29289 11.2929L10.2929 4.29289C10.6834 3.90237 11.3166 3.90237 11.7071 4.29289C12.0976 4.68342 12.0976 5.31658 11.7071 5.70711L6.41421 11H20C20.5523 11 21 11.4477 21 12C21 12.5523 20.5523 13 20 13L6.41422 13L11.7071 18.2929C12.0976 18.6834 12.0976 19.3166 11.7071 19.7071C11.3166 20.0976 10.6834 20.0976 10.2929 19.7071L3.29289 12.7071C3.10536 12.5196 3 12.2652 3 12Z" fill="currentColor"></path></svg><div class="flex flex-col"><div class="text-xs font-bold text-gray-800 dark:text-gray-200">
+Previous
+</div><div class="text-sm text-gray-500 dark:text-gray-400">Build a custom UX</div></div></a><a href="/apps-sdk/build/storage" class="flex items-end gap-2"><div class="flex flex-col"><div class="text-xs font-bold text-gray-800 dark:text-gray-200">
+Next
+</div><div class="text-sm text-gray-500 dark:text-gray-400">Persist state</div></div><svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-gray-800 dark:text-gray-200 mb-1 " ><path d="M21 12C21 12.2652 20.8946 12.5196 20.7071 12.7071L13.7071 19.7071C13.3166 20.0976 12.6834 20.0976 12.2929 19.7071C11.9024 19.3166 11.9024 18.6834 12.2929 18.2929L17.5858 13H4C3.44772 13 3 12.5523 3 12C3 11.4477 3.44772 11 4 11L17.5858 11L12.2929 5.70711C11.9024 5.31658 11.9024 4.68342 12.2929 4.29289C12.6834 3.90237 13.3166 3.90237 13.7071 4.29289L20.7071 11.2929C20.8946 11.4804 21 11.7348 21 12Z" fill="currentColor"></path></svg></a></div></nav> </main> </div> <script>(()=>{var e=async t=>{await(await t())()};(self.Astro||(self.Astro={})).only=e;window.dispatchEvent(new Event("astro:only"));})();</script><astro-island uid="DQ4jb" component-url="/_astro/Analytics.ClfYsMBJ.js" component-export="default" renderer-url="/_astro/client.BzL3K439.js" props="{}" ssr client="only" opts="{&quot;name&quot;:&quot;VercelAnalyticsClient&quot;,&quot;value&quot;:&quot;solid-js&quot;}"></astro-island> </body></html>

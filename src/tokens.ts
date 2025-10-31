@@ -25,6 +25,15 @@ export const issueAccessToken = async (
   const now = Math.floor(Date.now() / 1000);
   const expiresAt = now + CONFIG.accessTokenTtlSeconds;
   const signer = getSigningKey();
+  console.info("[tokens] issuing access token", {
+    subject,
+    clientId,
+    resource,
+    scope,
+    email: email ? "[REDACTED]" : undefined,
+    issuedAt: now,
+    expiresAt,
+  });
   const token = await new SignJWT({
     scope,
     azp: clientId,
@@ -49,6 +58,13 @@ export const issueIdToken = async (
   const now = Math.floor(Date.now() / 1000);
   const expiresAt = now + CONFIG.accessTokenTtlSeconds;
   const signer = getSigningKey();
+  console.info("[tokens] issuing id token", {
+    subject,
+    clientId,
+    email: email ? "[REDACTED]" : undefined,
+    issuedAt: now,
+    expiresAt,
+  });
   const token = await new SignJWT({
     email,
   })

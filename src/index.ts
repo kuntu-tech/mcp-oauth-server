@@ -9,7 +9,6 @@ import { CONFIG } from "./config";
 import {
   createClient,
   createUser,
-  findAppByResource,
   findAppByUuid,
   findClientById,
   findClientByRegistrationAccessToken,
@@ -25,6 +24,7 @@ import {
   getAppScopes,
   getAllSupportedScopes,
   listApps,
+  canonicalizeScopes,
 } from "./store";
 import type { App, Client } from "./store";
 import { initializeKeys, getJwks } from "./keyManager";
@@ -92,6 +92,38 @@ app.use(
   })
 );
 
+app.use((req, res, next) => {
+  const start = Date.now();
+  const { method, originalUrl } = req;
+  const requestDetails = buildRequestLogDetails(req);
+  if (Object.keys(requestDetails).length > 0) {
+    logHttpEvent(method, originalUrl, "request", requestDetails);
+  } else {
+    logHttpEvent(method, originalUrl, "request");
+  }
+
+  res.on("finish", () => {
+    const responseDetails: RouteLogDetails = {
+      status: res.statusCode,
+      durationMs: Date.now() - start,
+    };
+    if (res.getHeader("x-request-id")) {
+      responseDetails.requestId = res.getHeader("x-request-id");
+    }
+    logHttpEvent(method, originalUrl, "response", responseDetails);
+  });
+
+  res.on("error", (error) => {
+    const errorDetails: RouteLogDetails = {
+      status: res.statusCode,
+      error: error instanceof Error ? error.message : error,
+    };
+    logHttpEvent(method, originalUrl, "error", errorDetails);
+  });
+
+  next();
+});
+
 const escapeHtml = (value: string): string =>
   value
     .replace(/&/g, "&amp;")
@@ -113,6 +145,60 @@ type AuthResumePayload = {
   code_challenge: string;
   code_challenge_method: "S256";
   resource: string;
+};
+
+const normalizeResourceValue = (value: string): string =>
+  value.endsWith("/") && value.length > 1 ? value.replace(/\/+$/, "") : value;
+
+const appMatchesResource = (app: App, resource: string): boolean => {
+  const target = normalizeResourceValue(resource);
+  if (
+    app.resource_uri &&
+    normalizeResourceValue(app.resource_uri) === target
+  ) {
+    return true;
+  }
+  return app.mcp_server_ids.some(
+    (serverId) => normalizeResourceValue(serverId) === target
+  );
+};
+
+const selectDefaultApp = (apps: App[]): App | undefined => {
+  const defaultServerId = CONFIG.defaultMcpServerId?.trim();
+  if (defaultServerId) {
+    const defaultApp = apps.find((app) =>
+      appMatchesResource(app, defaultServerId)
+    );
+    if (defaultApp) {
+      return defaultApp;
+    }
+  }
+
+  const appsWithMcpIds = apps.filter((app) => app.mcp_server_ids.length > 0);
+  if (appsWithMcpIds.length === 1) {
+    return appsWithMcpIds[0];
+  }
+
+  if (appsWithMcpIds.length === 0) {
+    const appsWithResource = apps.filter((app) =>
+      Boolean(app.resource_uri.trim())
+    );
+    if (appsWithResource.length === 1) {
+      return appsWithResource[0];
+    }
+    if (apps.length === 1) {
+      return apps[0];
+    }
+  }
+
+  return undefined;
+};
+
+const findAppByResourceLocal = async (
+  resource: string
+): Promise<App | undefined> => {
+  const apps = await listApps();
+  return apps.find((app) => appMatchesResource(app, resource));
 };
 
 const renderPage = (
@@ -153,6 +239,99 @@ const renderPage = (
   </body>
 </html>
 `;
+
+type RouteLogDetails = Record<string, unknown>;
+
+const SENSITIVE_LOG_KEYS = new Set([
+  "password",
+  "password_hash",
+  "clientsecret",
+  "client_secret",
+  "refresh_token",
+  "access_token",
+  "id_token",
+  "idtoken",
+  "registration_access_token",
+  "registrationaccesstoken",
+  "code",
+  "token",
+]);
+
+const sanitizeForLogging = (input: unknown): unknown => {
+  if (input === null || input === undefined) {
+    return input;
+  }
+  if (input instanceof Date) {
+    return input.toISOString();
+  }
+  if (Array.isArray(input)) {
+    const limit = 20;
+    const sanitized = input.slice(0, limit).map((item) => sanitizeForLogging(item));
+    if (input.length > limit) {
+      sanitized.push(`...${input.length - limit} more`);
+    }
+    return sanitized;
+  }
+  if (typeof input === "object") {
+    const result: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
+      const normalizedKey = key.toLowerCase();
+      if (SENSITIVE_LOG_KEYS.has(normalizedKey)) {
+        result[key] = "[REDACTED]";
+      } else {
+        result[key] = sanitizeForLogging(value);
+      }
+    }
+    return result;
+  }
+  if (typeof input === "string") {
+    return input.length > 160 ? `${input.slice(0, 157)}...` : input;
+  }
+  return input;
+};
+
+const logHttpEvent = (
+  method: string,
+  url: string,
+  phase: "request" | "response" | "error",
+  details?: RouteLogDetails
+) => {
+  const prefix = `[${method} ${url}] ${phase}`;
+  const sanitizedDetails = details ? sanitizeForLogging(details) : undefined;
+  if (phase === "error") {
+    if (sanitizedDetails) {
+      console.error(prefix, sanitizedDetails);
+    } else {
+      console.error(prefix);
+    }
+  } else if (sanitizedDetails) {
+    console.info(prefix, sanitizedDetails);
+  } else {
+    console.info(prefix);
+  }
+};
+
+const buildRequestLogDetails = (req: express.Request): RouteLogDetails => {
+  const details: RouteLogDetails = {};
+  if (req.query && Object.keys(req.query).length > 0) {
+    details.query = req.query;
+  }
+  if (req.body !== undefined) {
+    const isEmptyObject =
+      typeof req.body === "object" &&
+      req.body !== null &&
+      !Array.isArray(req.body) &&
+      Object.keys(req.body as Record<string, unknown>).length === 0;
+    const isEmptyString = typeof req.body === "string" && req.body.trim().length === 0;
+    if (!isEmptyObject && !isEmptyString) {
+      details.body = req.body;
+    }
+  }
+  if (req.session?.userUuid) {
+    details.sessionUser = req.session.userUuid;
+  }
+  return details;
+};
 
 const persistSession = async (req: express.Request): Promise<void> => {
   if (typeof req.session.save === "function") {
@@ -1295,7 +1474,7 @@ const prepareAuthorizationDetails = async (params: AuthorizationParams) => {
       `<p class="danger">redirect_uri is not registered for this client.</p>`
     );
   }
-  const appRecord = await findAppByResource(params.resource);
+  const appRecord = await findAppByResourceLocal(params.resource);
   if (!appRecord) {
     throw new AuthorizationRequestError(
       400,
@@ -1314,11 +1493,12 @@ const prepareAuthorizationDetails = async (params: AuthorizationParams) => {
       `<p class="danger">Requested scopes are not supported.</p>`
     );
   }
+  const canonicalScopes = canonicalizeScopes(validScopes);
   const authRequest: PendingAuthRequest = {
     response_type: params.response_type,
     client_id: params.client_id,
     redirect_uri: params.redirect_uri,
-    scope: validScopes,
+    scope: canonicalScopes,
     state: params.state,
     code_challenge: params.code_challenge,
     code_challenge_method: params.code_challenge_method,
@@ -1807,7 +1987,7 @@ app.post("/oauth/authorize", async (req, res) => {
     if (sessionAuth) {
       const [client, appRecord] = await Promise.all([
         findClientById(sessionAuth.client_id),
-        findAppByResource(sessionAuth.resource),
+        findAppByResourceLocal(sessionAuth.resource),
       ]);
       return res
         .status(400)
@@ -1924,6 +2104,13 @@ app.post("/oauth/token", async (req, res) => {
   }
   const data = parsed.data;
   if (data.grant_type === "authorization_code") {
+    logHttpEvent("POST", req.originalUrl, "request", {
+      grantType: data.grant_type,
+      clientId: data.client_id,
+      redirectUri: data.redirect_uri,
+      hasCodeVerifier: Boolean(data.code_verifier),
+      resource: data.resource,
+    });
     const client = await findClientById(data.client_id);
     if (!client) {
       return res
@@ -1966,6 +2153,19 @@ app.post("/oauth/token", async (req, res) => {
         .json({ error: "invalid_target", error_description: "Resource mismatch." });
     }
     const resource = codeRecord.resource;
+    console.info(
+      "[oauth/token] authorization_code pre-issue state",
+      sanitizeForLogging({
+        clientId: client.client_id,
+        grantType: data.grant_type,
+        redirectUri: data.redirect_uri,
+        resource,
+        scope: codeRecord.scope,
+        userUuid: codeRecord.user_uuid,
+        codeIssuedAt: codeRecord.expires_at - 600,
+        codeExpiresAt: codeRecord.expires_at,
+      })
+    );
     const digest = crypto
       .createHash("sha256")
       .update(data.code_verifier)
@@ -2025,6 +2225,12 @@ app.post("/oauth/token", async (req, res) => {
   }
 
   if (data.grant_type === "refresh_token") {
+    logHttpEvent("POST", req.originalUrl, "request", {
+      grantType: data.grant_type,
+      clientId: data.client_id,
+      hasClientSecret: Boolean(data.client_secret),
+      hasRefreshToken: Boolean(data.refresh_token),
+    });
     const client = await findClientById(data.client_id);
     if (!client) {
       return res
@@ -2063,6 +2269,17 @@ app.post("/oauth/token", async (req, res) => {
         .status(400)
         .json({ error: "invalid_grant", error_description: "User no longer exists." });
     }
+    console.info(
+      "[oauth/token] refresh_token pre-issue state",
+      sanitizeForLogging({
+        clientId: client.client_id,
+        grantType: data.grant_type,
+        refreshTokenUser: stored.user_uuid,
+        refreshTokenScope: stored.scope,
+        refreshTokenResource: stored.resource,
+        refreshTokenExpiresAt: stored.expires_at,
+      })
+    );
     const { token: newAccessToken, expiresAt } = await issueAccessToken(
       user.uuid,
       client.client_id,
@@ -2112,27 +2329,31 @@ app.post("/oauth/register", async (req, res) => {
       .json({ error: "invalid_request", error_description: "Malformed registration payload." });
   }
   const data = parsed.data;
+  const apps = await listApps();
+  console.log("apps from Supabase", apps);
   let appRecord: App | undefined;
-  if (data.resource) {
-    appRecord = await findAppByResource(data.resource);
+  const resource = data.resource;
+  if (resource) {
+    appRecord = apps.find((app) => appMatchesResource(app, resource));
+    if (!appRecord) {
+      appRecord = selectDefaultApp(apps);
+    }
     if (!appRecord) {
       return res.status(400).json({
         error: "invalid_target",
         error_description: "Unknown resource.",
       });
     }
-  } else {
-    const configuredApps = (await listApps()).filter((app) =>
-      Boolean(app.resource_uri?.trim())
-    );
-    if (configuredApps.length === 1) {
-      appRecord = configuredApps[0];
-    } else {
-      return res.status(400).json({
-        error: "invalid_target",
-        error_description: "resource is required for multi-MCP registration.",
-      });
-    }
+  } 
+  else {
+    appRecord = apps[0];
+    // console.log("appRecord from selectDefaultApp", appRecord);
+    // if (!appRecord) {
+    //   return res.status(400).json({
+    //     error: "invalid_target",
+    //     error_description: "resource is required for multi-MCP registration.",
+    //   });
+    // }
   }
   const requestedScopeString = data.scope ?? appRecord.default_scopes;
   const requestedScopes = requestedScopeString.split(" ").filter(Boolean);
@@ -2143,7 +2364,8 @@ app.post("/oauth/register", async (req, res) => {
       error_description: "One or more requested scopes are not supported.",
     });
   }
-  const scope = validScopes.join(" ");
+  const canonicalScopes = canonicalizeScopes(validScopes);
+  const scope = canonicalScopes.join(" ");
   const client = await createClient({
     client_name: data.client_name,
     application_type: data.application_type,
@@ -2153,9 +2375,8 @@ app.post("/oauth/register", async (req, res) => {
     token_endpoint_auth_method: data.token_endpoint_auth_method,
     app_uuid: appRecord.uuid,
   });
-  const response = {
+  const response: Record<string, unknown> = {
     client_id: client.client_id,
-    client_secret: client.client_secret,
     client_id_issued_at: client.client_id_issued_at,
     client_secret_expires_at: client.client_secret_expires_at,
     registration_access_token: client.registration_access_token,
@@ -2166,6 +2387,9 @@ app.post("/oauth/register", async (req, res) => {
     grant_types: client.grant_types,
     scope,
   };
+  if (client.client_secret) {
+    response.client_secret = client.client_secret;
+  }
   return res.status(201).json(response);
 });
 
@@ -2245,7 +2469,7 @@ app.get("/.well-known/oauth-authorization-server", async (_req, res) => {
 app.get("/.well-known/oauth-protected-resource", async (req, res) => {
   const resource = req.query.resource;
   if (typeof resource === "string") {
-    const appRecord = await findAppByResource(resource);
+    const appRecord = await findAppByResourceLocal(resource);
     if (!appRecord) {
       return res.status(404).json({
         error: "invalid_resource",

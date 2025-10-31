@@ -40,6 +40,8 @@ const firebaseUiProviders = (process.env.FIREBASE_SIGN_IN_PROVIDERS ?? "email")
   .map((value) => value.trim().toLowerCase())
   .filter(Boolean);
 
+const defaultMcpServerId = process.env.DEFAULT_MCP_SERVER_ID;
+
 const supabaseConfig = {
   url: process.env.SUPABASE_URL,
   serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
@@ -64,6 +66,7 @@ export const CONFIG = {
   privacyPolicyUrl:
     process.env.PRIVACY_POLICY_URL ??
     "https://developers.openai.com/apps-sdk/data-usage#privacy",
+  defaultMcpServerId,
   firebaseClientConfig: hasFirebaseClientConfig
     ? firebaseClientConfig
     : undefined,
