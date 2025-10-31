@@ -616,57 +616,54 @@ const buildFirebaseUiSnippet = (mode: FirebaseUiMode = "auth"): string => {
           providerIds.push(firebase.auth.EmailAuthProvider.PROVIDER_ID);
         }
 
-        const processAuthResult = async (authResult) => {
-          const email =
-            authResult?.user?.email || authResult?.user?.uid || "";
-          setStatus("loading", "Firebase " + authModeLabel + " successful: " + email + ", verifying...");
-          try {
-            const idToken = await authResult.user.getIdToken();
-            const requestPayload = { idToken };
-            if (resumeAuth) {
-              requestPayload.resume = resumeAuth;
-            }
-            const response = await fetch("/auth/firebase/session", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify(requestPayload),
-              credentials: "same-origin",
-            });
-            const payload = await response.json().catch(() => ({}));
-            if (!response.ok || !payload?.ok) {
-              const message =
-                payload?.error ||
-                payload?.message ||
-                "Server failed to complete login verification.";
-              throw new Error(message);
-            }
-            setStatus("success", "Login successful, redirecting...");
-            if (payload.redirect) {
-              window.location.assign(payload.redirect);
-            } else if (authState?.pendingAuth) {
-              window.location.assign("/oauth/authorize");
-            } else {
-              setTimeout(() => hideModal(), 800);
-            }
-          } catch (err) {
-            console.error("Firebase login verification failed", err);
-            setStatus(
-              "error",
-              "Firebase login verification failed: " + (err?.message || "Unknown error")
-            );
-          }
-        };
-
         const uiConfig = {
           signInFlow: "popup",
           signInOptions: providerIds,
           tosUrl: "${CONFIG.docsUrl}",
           privacyPolicyUrl: "${CONFIG.privacyPolicyUrl}",
           callbacks: {
-            signInSuccessWithAuthResult: function (authResult) {
-              processAuthResult(authResult);
+            signInSuccessWithAuthResult: async function (authResult) {
+              const email =
+                authResult?.user?.email || authResult?.user?.uid || "";
+              setStatus("loading", "Firebase " + authModeLabel + " successful: " + email + ", verifying...");
+              try {
+                const idToken = await authResult.user.getIdToken();
+                const requestPayload = { idToken };
+                if (resumeAuth) {
+                  requestPayload.resume = resumeAuth;
+                }
+                const response = await fetch("/auth/firebase/session", {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify(requestPayload),
+                  credentials: "same-origin",
+                });
+                const payload = await response.json().catch(() => ({}));
+                if (!response.ok || !payload?.ok) {
+                  const message =
+                    payload?.error ||
+                    payload?.message ||
+                    "Server failed to complete login verification.";
+                  throw new Error(message);
+                }
+                setStatus("success", "Login successful, redirecting...");
+                console.log("payload", payload);
+                if (payload.redirect) {
+                  window.location.assign(payload.redirect);
+                } else if (authState?.pendingAuth) {
+                  window.location.assign("/oauth/authorize");
+                } else {
+                  setTimeout(() => hideModal(), 800);
+                }
+              } catch (err) {
+                console.error("Firebase login verification failed", err);
+                setStatus(
+                  "error",
+                  "Firebase login verification failed: " + (err?.message || "Unknown error")
+                );
+              }
               return false;
             },
             signInFailure: function (error) {
