@@ -521,11 +521,14 @@ const buildFirebaseUiSnippet = (mode: FirebaseUiMode = "auth"): string => {
         const modal = document.getElementById("firebase-auth-modal");
         const closeButton = document.getElementById("close-firebase-modal");
         const backdrop = document.getElementById("firebase-auth-backdrop");
-        const openButtons = Array.from(
-          document.querySelectorAll("[data-firebase-modal-trigger]")
-        );
+        const queryOpenButtons = () =>
+          Array.from(
+            document.querySelectorAll("[data-firebase-modal-trigger]")
+          );
+        let openButtons = queryOpenButtons();
         const statusEl = document.getElementById("firebaseui-status");
         const container = document.getElementById("firebaseui-modal-container");
+        const headerAuthContainer = document.getElementById("header-auth-status");
         if (!modal || !container) {
           console.warn("Firebase modal container not found.");
           return;
@@ -574,12 +577,15 @@ const buildFirebaseUiSnippet = (mode: FirebaseUiMode = "auth"): string => {
             hideModal();
           });
         }
-        openButtons.forEach((button) =>
-          button.addEventListener("click", (event) => {
-            event.preventDefault();
-            showModal();
-          })
-        );
+        const bindOpenButtons = () => {
+          openButtons.forEach((button) =>
+            button.addEventListener("click", (event) => {
+              event.preventDefault();
+              showModal();
+            })
+          );
+        };
+        bindOpenButtons();
 
         const auth = firebase.auth();
         const ui =
@@ -616,54 +622,77 @@ const buildFirebaseUiSnippet = (mode: FirebaseUiMode = "auth"): string => {
           providerIds.push(firebase.auth.EmailAuthProvider.PROVIDER_ID);
         }
 
+        const renderHeaderAuthEmail = (email) => {
+          if (!headerAuthContainer || !email) {
+            return;
+          }
+          const safeEmail = String(email).trim();
+          headerAuthContainer.innerHTML = "";
+          const wrapper = document.createElement("span");
+          wrapper.className = "text-sm text-gray-600";
+          const label = document.createElement("span");
+          label.textContent = "Logged in: ";
+          const value = document.createElement("span");
+          value.className = "font-semibold text-gray-900";
+          value.textContent = safeEmail;
+          wrapper.appendChild(label);
+          wrapper.appendChild(value);
+          headerAuthContainer.appendChild(wrapper);
+          openButtons = queryOpenButtons();
+        };
+
+        const processAuthResult = async (authResult) => {
+          const email =
+            authResult?.user?.email || authResult?.user?.uid || "";
+          setStatus("loading", "Firebase " + authModeLabel + " successful: " + email + ", verifying...");
+          try {
+            const idToken = await authResult.user.getIdToken();
+            const requestPayload = { idToken };
+            if (resumeAuth) {
+              requestPayload.resume = resumeAuth;
+            }
+            const response = await fetch("/auth/firebase/session", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify(requestPayload),
+              credentials: "same-origin",
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok || !payload?.ok) {
+              const message =
+                payload?.error ||
+                payload?.message ||
+                "Server failed to complete login verification.";
+              throw new Error(message);
+            }
+            setStatus("success", "Login successful, redirecting...");
+            renderHeaderAuthEmail(email);
+            if (payload.redirect) {
+              window.location.assign(payload.redirect);
+            } else if (authState?.pendingAuth) {
+              window.location.assign("/oauth/authorize");
+            } else {
+              setTimeout(() => hideModal(), 800);
+            }
+          } catch (err) {
+            console.error("Firebase login verification failed", err);
+            setStatus(
+              "error",
+              "Firebase login verification failed: " + (err?.message || "Unknown error")
+            );
+          }
+        };
+
         const uiConfig = {
           signInFlow: "popup",
           signInOptions: providerIds,
           tosUrl: "${CONFIG.docsUrl}",
           privacyPolicyUrl: "${CONFIG.privacyPolicyUrl}",
           callbacks: {
-            signInSuccessWithAuthResult: async function (authResult) {
-              const email =
-                authResult?.user?.email || authResult?.user?.uid || "";
-              setStatus("loading", "Firebase " + authModeLabel + " successful: " + email + ", verifying...");
-              try {
-                const idToken = await authResult.user.getIdToken();
-                const requestPayload = { idToken };
-                if (resumeAuth) {
-                  requestPayload.resume = resumeAuth;
-                }
-                const response = await fetch("/auth/firebase/session", {
-                  method: "POST",
-                  headers: {
-                    "Content-Type": "application/json",
-                  },
-                  body: JSON.stringify(requestPayload),
-                  credentials: "same-origin",
-                });
-                const payload = await response.json().catch(() => ({}));
-                if (!response.ok || !payload?.ok) {
-                  const message =
-                    payload?.error ||
-                    payload?.message ||
-                    "Server failed to complete login verification.";
-                  throw new Error(message);
-                }
-                setStatus("success", "Login successful, redirecting...");
-                console.log("payload", payload);
-                if (payload.redirect) {
-                  window.location.assign(payload.redirect);
-                } else if (authState?.pendingAuth) {
-                  window.location.assign("/oauth/authorize");
-                } else {
-                  setTimeout(() => hideModal(), 800);
-                }
-              } catch (err) {
-                console.error("Firebase login verification failed", err);
-                setStatus(
-                  "error",
-                  "Firebase login verification failed: " + (err?.message || "Unknown error")
-                );
-              }
+            signInSuccessWithAuthResult: function (authResult) {
+              processAuthResult(authResult);
               return false;
             },
             signInFailure: function (error) {
@@ -1292,15 +1321,15 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
     <footer class="bg-black text-white py-12">
       <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-4">
         <p class="text-gray-400 text-sm">
-          © ${new Date().getFullYear()} Auth Server. All rights reserved.
+          © ${new Date().getFullYear()} ${escapeHtml(appName)}. All rights reserved.
         </p>
-        <p class="text-sm text-gray-500">
+        <!-- <p class="text-sm text-gray-500">
           If you need support, please contact <a href="${escapeHtml(
             contactLink
           )}" class="text-white font-semibold hover:text-gray-300 transition-colors">${escapeHtml(
     contactLink.replace(/^mailto:/, "")
   )}</a>
-        </p>
+        </p>-->
       </div>
     </footer>
   `;
@@ -1323,29 +1352,10 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
   const firebaseSnippet = hasFirebase ? buildFirebaseUiSnippet("auth") : "";
 
   const headerAction = currentUserEmail
-    ? `
-        <div class="flex items-center gap-3 text-sm text-gray-600">
-          <span>Logged in: <span class="font-semibold text-gray-900">${escapeHtml(
-            currentUserEmail
-          )}</span></span>
-          <button
-            type="button"
-            data-firebase-modal-trigger
-            class="inline-flex items-center px-3 py-1.5 border border-gray-300 rounded-md hover:bg-gray-100 transition-colors"
-          >
-            Switch account
-          </button>
-        </div>
-      `
-    : `
-        <button
-          type="button"
-          data-firebase-modal-trigger
-          class="inline-flex items-center px-4 py-2 text-sm font-semibold border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors"
-        >
-          Sign in experience
-        </button>
-      `;
+    ? `<span class="text-sm text-gray-600">Logged in: <span class="font-semibold text-gray-900">${escapeHtml(
+        currentUserEmail
+      )}</span></span>`
+    : ``;
 
   return `
 <!DOCTYPE html>
@@ -1382,7 +1392,7 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
             <span class="w-10 h-10 rounded-xl bg-gray-900 text-white flex items-center justify-center font-bold shadow-md">${escapeHtml(appInitial)}</span>
             <span class="text-lg font-semibold text-gray-900">${escapeHtml(appName)}</span>
           </a>
-          <div class="flex items-center gap-4">
+          <div id="header-auth-status" class="flex items-center gap-4">
             ${headerAction}
           </div>
         </div>
