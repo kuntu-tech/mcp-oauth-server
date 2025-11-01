@@ -976,7 +976,7 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
   const docsUrl =
     CONFIG.docsUrl && CONFIG.docsUrl.trim().length > 0
       ? CONFIG.docsUrl
-      : "https://platform.openai.com/docs/apps";
+      : "https://chatgpt.com/";
   const contactLink =
     CONFIG.adminContact && CONFIG.adminContact.trim().length > 0
       ? CONFIG.adminContact
@@ -1020,24 +1020,43 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
     })
     .join("");
 
-  const howItWorksHtml = landingPageContent.howItWorks
-    .map((item, index) => {
-      const question = trimOrUndefined(item.question);
-      const answer = trimOrUndefined(item.answer);
-      if (!question && !answer) {
-        return "";
-      }
-      const stepNumber = (index + 1).toString().padStart(2, "0");
-      const questionBlock = question
-        ? `<div class="chat-bubble">${escapeHtml(question)}</div>`
-        : "";
-      const answerBlock = answer
-        ? `<div class="chat-bubble assistant">${escapeHtml(answer)}</div>`
-        : "";
+  const conversationEntries = landingPageContent.howItWorks.flatMap((item) => {
+    const question = trimOrUndefined(item.question);
+    const answer = trimOrUndefined(item.answer);
+    const entries: Array<{ type: "user" | "assistant"; message: string }> = [];
+    if (question) {
+      entries.push({ type: "user", message: question });
+    }
+    if (answer) {
+      entries.push({ type: "assistant", message: answer });
+    }
+    return entries;
+  });
+
+  const howItWorksHtml = conversationEntries
+    .map((entry, index) => {
+      const isUser = entry.type === "user";
+      const alignmentClass = isUser ? "justify-end" : "justify-start";
+      const rowDirection = isUser ? "flex-row-reverse" : "";
+      const bubbleClass = isUser
+        ? "chat-bubble user"
+        : "chat-bubble assistant";
+      const iconWrapperClass = isUser
+        ? "chat-avatar user"
+        : "chat-avatar assistant";
+      const icon = isUser
+        ? iconMessageCircle("w-5 h-5 text-white")
+        : iconBot("w-5 h-5 text-white");
       return `
-        <div class="timeline-item" data-step="${stepNumber}" data-animate="fade-up" style="--delay:${index * 90}ms">
-          ${questionBlock}
-          ${answerBlock}
+        <div class="chat-row ${alignmentClass}" data-animate="fade-up" style="--delay:${index * 80}ms">
+          <div class="chat-entry ${rowDirection}">
+            <div class="${iconWrapperClass}">
+              ${icon}
+            </div>
+            <div class="${bubbleClass}">
+              <p class="chat-text">${escapeHtml(entry.message)}</p>
+            </div>
+          </div>
         </div>
       `;
     })
@@ -1202,41 +1221,45 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
     : "";
 
   const heroSection = `
-    <section class="hero-section relative overflow-hidden pt-28 md:pt-32 pb-20">
+    <section class="hero-section relative overflow-hidden min-h-screen flex items-center justify-center py-24 md:py-28">
       <div class="hero-decoration" aria-hidden="true">
         <span></span>
         <span></span>
         <span></span>
       </div>
-      <div class="relative max-w-5xl mx-auto px-6 text-center space-y-6">
-        
-        <h1 class="text-4xl md:text-6xl font-bold leading-tight text-slate-900 word-fade" data-animate-words>
-          ${escapeHtml(heroTitle)}
-        </h1>
-        ${
-          heroTagline
-            ? `<p class="max-w-2xl mx-auto text-lg md:text-2xl text-slate-700 word-fade" data-animate-words style="--delay: 80ms">
-            ${escapeHtml(heroTagline)}
-          </p>`
-            : ""
-        }
-        <p class="max-w-3xl mx-auto text-base md:text-lg text-slate-600 leading-relaxed" data-typewriter>
-          ${escapeHtml(landingPageContent.app.description)}
-        </p>
-        <div class="flex flex-col sm:flex-row items-center justify-center gap-3 mt-6" data-animate="fade-up" style="--delay: 160ms">
-          <a href="${escapeHtml(
-            docsUrl
-          )}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 rounded-full px-7 py-3 bg-slate-900 text-white font-semibold shadow-lg shadow-indigo-200/40 hover:bg-black transition">
-            <span>Use Now in ChatGPT</span>
-            ${iconArrowRight("w-5 h-5")}
-          </a>
+      <div class="relative w-full">
+        <div class="hero-copy max-w-5xl mx-auto px-6 text-center flex flex-col items-center gap-6">
+          <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full floating-badge" data-animate="fade-up">
+            <h1 class="text-4xl md:text-6xl font-bold leading-tight text-slate-900 word-fade" data-animate-words>
+            ${escapeHtml(heroTitle)}
+          </h1>
+          </div>
+          
           ${
-            hasFirebase
-              ? `<button type="button" data-open-firebase class="inline-flex items-center gap-2 rounded-full px-7 py-3 border border-slate-300/70 bg-white/80 text-slate-800 font-semibold shadow-sm hover:border-slate-400 transition">
-                <span>Sign in to Continue</span>
-              </button>`
+            heroTagline
+              ? `<p class="max-w-2xl mx-auto text-lg md:text-2xl text-slate-700 word-fade" data-animate-words style="--delay: 80ms">
+              ${escapeHtml(heroTagline)}
+            </p>`
               : ""
           }
+          <p class="hero-description max-w-3xl mx-auto text-base md:text-lg text-slate-600 leading-relaxed" data-typewriter>
+            ${escapeHtml(landingPageContent.app.description)}
+          </p>
+          <div class="flex flex-col sm:flex-row items-center justify-center gap-3" data-animate="fade-up" style="--delay: 160ms">
+            <a href="${escapeHtml(
+              docsUrl
+            )}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 rounded-full px-7 py-3 bg-slate-900 text-white font-semibold shadow-lg shadow-indigo-200/40 hover:bg-black transition">
+              <span>Use Now in ChatGPT</span>
+              ${iconArrowRight("w-5 h-5")}
+            </a>
+            ${
+              hasFirebase
+                ? `<button type="button" data-open-firebase class="inline-flex items-center gap-2 rounded-full px-7 py-3 border border-slate-300/70 bg-white/80 text-slate-800 font-semibold shadow-sm hover:border-slate-400 transition">
+                  <span>Sign in to Continue</span>
+                </button>`
+                : ""
+            }
+          </div>
         </div>
       </div>
     </section>
@@ -1260,7 +1283,7 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
     <section id="how-it-works" class="py-20 bg-slate-50/60">
       <div class="max-w-4xl mx-auto px-6">
         <h2 class="section-title" data-animate="fade-up">How It Works</h2>
-        <div class="timeline mt-12 space-y-6">
+        <div class="chat-thread">
           ${howItWorksHtml}
         </div>
       </div>
@@ -1322,13 +1345,13 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
         <p class="text-sm text-slate-300">
           © ${new Date().getFullYear()} ${escapeHtml(appName)}. All rights reserved.
         </p>
-        <p class="text-xs text-slate-500">
+        <!--<p class="text-xs text-slate-500">
           Need support? <a href="${escapeHtml(
             contactLink
           )}" class="text-indigo-300 font-medium hover:text-indigo-200 transition">${escapeHtml(
     contactLabel
   )}</a>
-        </p>
+        </p>-->
       </div>
     </footer>
   `;
@@ -1370,40 +1393,8 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
         const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
         const wordElements = Array.from(document.querySelectorAll("[data-animate-words]"));
 
-        wordElements.forEach((element) => {
-          const text = (element.textContent || "").trim();
-          if (!text) {
-            return;
-          }
-          const words = text.split(/\s+/);
-          if (words.length <= 1) {
-            element.dataset.singleWord = "true";
-            element.innerHTML = "";
-            const span = document.createElement("span");
-            span.textContent = text;
-            span.classList.add("is-visible");
-            element.appendChild(span);
-            return;
-          }
-          element.innerHTML = "";
-          words.forEach((word, index) => {
-            const span = document.createElement("span");
-            span.textContent = word;
-            span.style.setProperty("--index", String(index));
-            element.appendChild(span);
-            if (index !== words.length - 1) {
-              element.appendChild(document.createTextNode(" "));
-            }
-          });
-        });
-
-        const revealWordElement = (element) => {
-          const spans = element.querySelectorAll("span");
-          spans.forEach((span, index) => {
-            const delay = index * 60;
-            span.style.setProperty("--delay", delay + "ms");
-            setTimeout(() => span.classList.add("is-visible"), delay);
-          });
+        const showWordElement = (element) => {
+          element.classList.add("is-visible");
         };
 
         const typewriterElements = Array.from(document.querySelectorAll("[data-typewriter]"));
@@ -1436,9 +1427,7 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
 
         if (prefersReduced) {
           animatedElements.forEach((el) => el.classList.add("is-visible"));
-          wordElements.forEach((element) => {
-            element.querySelectorAll("span").forEach((span) => span.classList.add("is-visible"));
-          });
+          wordElements.forEach(showWordElement);
           typewriterElements.forEach((element) => {
             element.textContent = element.getAttribute("data-typewriter-text") || "";
             element.classList.add("is-complete");
@@ -1468,24 +1457,20 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
 
         animatedElements.forEach((element) => observer.observe(element));
 
-        wordElements.forEach((element) => {
-          if (element.dataset.singleWord === "true") {
-            return;
-          }
-          const wordObserver = new IntersectionObserver(
-            (entries, wordObs) => {
-              entries.forEach((entry) => {
-                if (!entry.isIntersecting) {
-                  return;
-                }
-                revealWordElement(element);
-                wordObs.unobserve(entry.target);
-              });
-            },
-            { threshold: 0.6, rootMargin: "0px 0px -20% 0px" }
-          );
-          wordObserver.observe(element);
-        });
+        const wordObserver = new IntersectionObserver(
+          (entries, obs) => {
+            entries.forEach((entry) => {
+              if (!entry.isIntersecting) {
+                return;
+              }
+              showWordElement(entry.target);
+              obs.unobserve(entry.target);
+            });
+          },
+          { threshold: 0.35, rootMargin: "0px 0px -10% 0px" }
+        );
+
+        wordElements.forEach((element) => wordObserver.observe(element));
 
         typewriterElements.forEach((element) => {
           const typeObserver = new IntersectionObserver(
@@ -1576,8 +1561,8 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
       main { overflow: hidden; }
       [data-animate] { opacity: 0; transform: translateY(24px) scale(0.98); transition: opacity 0.6s ease, transform 0.6s ease; }
       [data-animate].is-visible { opacity: 1; transform: none; }
-      .word-fade span { opacity: 0; display: inline-block; transform: translateY(12px); transition: opacity 0.45s ease, transform 0.45s ease; }
-      .word-fade span.is-visible { opacity: 1; transform: translateY(0); }
+      .word-fade { opacity: 0; display: inline-block; transform: translateY(12px); transition: opacity 0.45s ease, transform 0.45s ease; }
+      .word-fade.is-visible { opacity: 1; transform: translateY(0); }
       [data-typewriter] { position: relative; min-height: 1.6em; }
       [data-typewriter]::after { content: ""; position: absolute; width: 2px; height: 1.1em; background: currentColor; right: -6px; top: 50%; transform: translateY(-50%); animation: blink 1s steps(1) infinite; }
       [data-typewriter].is-complete::after { display: none; }
@@ -1588,6 +1573,8 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
       .hero-decoration span:nth-child(2) { background: rgba(56, 189, 248, 0.5); width: 380px; height: 380px; bottom: -140px; left: -80px; animation: gradientShift 20s ease-in-out infinite reverse; }
       .hero-decoration span:nth-child(3) { background: rgba(59, 130, 246, 0.45); width: 320px; height: 320px; top: 30%; left: 50%; transform: translate(-50%, -50%); animation: gradientShift 22s ease-in-out infinite; }
       .floating-badge { animation: float 6s ease-in-out infinite; }
+      .hero-copy { min-height: clamp(420px, 68vh, 680px); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.5rem; }
+      .hero-description { min-height: 3.2rem; display: flex; align-items: center; justify-content: center; text-align: center; }
       .pulse-indicator { width: 10px; height: 10px; border-radius: 999px; background: #6366f1; position: relative; }
       .pulse-indicator::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: rgba(99, 102, 241, 0.4); animation: pulse 2s ease-out infinite; }
       .glow-card { position: relative; border-radius: 24px; padding: 28px; background: rgba(255, 255, 255, 0.8); border: 1px solid rgba(99, 102, 241, 0.12); box-shadow: 0 25px 45px rgba(79, 70, 229, 0.08); overflow: hidden; transform: perspective(1000px) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg)); transition: transform 0.3s ease, box-shadow 0.3s ease; }
@@ -1595,13 +1582,19 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
       .glow-card:hover::before { opacity: 1; }
       .glow-card:hover { box-shadow: 0 35px 65px rgba(79, 70, 229, 0.18); }
       .glow-card .icon-wrapper { width: 52px; height: 52px; border-radius: 16px; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, rgba(79, 70, 229, 0.12), rgba(129, 140, 248, 0.32)); color: #312e81; margin-bottom: 18px; }
-      .timeline { position: relative; }
-      .timeline::before { content: ""; position: absolute; top: 0; bottom: 0; left: 50%; transform: translateX(-50%); width: 2px; background: linear-gradient(to bottom, rgba(99, 102, 241, 0.1), rgba(99, 102, 241, 0.25)); }
-      .timeline-item { position: relative; max-width: 540px; margin: 0 auto; border-radius: 18px; background: rgba(255, 255, 255, 0.88); border: 1px solid rgba(15, 23, 42, 0.08); box-shadow: 0 20px 40px rgba(15, 23, 42, 0.06); padding: 32px 28px 28px; }
-      .timeline-item + .timeline-item { margin-top: 24px; }
-      .timeline-item::before { content: attr(data-step); position: absolute; top: -14px; left: 24px; display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 14px; background: #1d4ed8; color: #ffffff; font-size: 0.85rem; font-weight: 600; box-shadow: 0 15px 25px rgba(29, 78, 216, 0.22); }
-      .chat-bubble { margin-top: 8px; padding: 18px 20px; border-radius: 18px; background: rgba(248, 250, 252, 0.9); font-size: 0.95rem; line-height: 1.6; color: #0f172a; }
-      .chat-bubble.assistant { background: linear-gradient(135deg, rgba(79, 70, 229, 0.12), rgba(129, 140, 248, 0.2)); color: #1f2937; }
+      .chat-thread { margin-top: 3rem; display: flex; flex-direction: column; gap: 1.5rem; }
+      .chat-row { display: flex; width: 100%; }
+      .chat-row.justify-end { justify-content: flex-end; }
+      .chat-row.justify-start { justify-content: flex-start; }
+      .chat-entry { display: flex; align-items: flex-start; gap: 0.85rem; max-width: 580px; width: 100%; }
+      .chat-entry.flex-row-reverse { flex-direction: row-reverse; }
+      .chat-avatar { width: 42px; height: 42px; border-radius: 999px; display: flex; align-items: center; justify-content: center; box-shadow: 0 12px 24px rgba(15, 23, 42, 0.15); }
+      .chat-avatar.user { background: linear-gradient(135deg, #0f172a, #1e293b); color: #fff; }
+      .chat-avatar.assistant { background: linear-gradient(135deg, rgba(79, 70, 229, 0.9), rgba(129, 140, 248, 0.9)); color: #fff; }
+      .chat-bubble { padding: 18px 22px; border-radius: 22px; background: rgba(248, 250, 252, 0.95); font-size: 0.97rem; line-height: 1.68; color: #0f172a; box-shadow: 0 18px 32px rgba(15, 23, 42, 0.12); border: 1px solid rgba(148, 163, 184, 0.12); }
+      .chat-bubble.user { background: linear-gradient(135deg, rgba(15, 23, 42, 0.92), rgba(30, 41, 59, 0.92)); color: #e2e8f0; border-color: rgba(71, 85, 105, 0.35); }
+      .chat-bubble.assistant { background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(241, 245, 249, 0.95)); color: #1e293b; border-color: rgba(99, 102, 241, 0.18); }
+      .chat-text { margin: 0; font-size: 0.95rem; }
       .glass-panel { background: rgba(15, 23, 42, 0.85); color: #e0e7ff; border-radius: 24px; padding: 32px; border: 1px solid rgba(148, 163, 184, 0.2); box-shadow: 0 35px 65px rgba(15, 23, 42, 0.45); }
       .glass-panel input { background: rgba(15, 23, 42, 0.55); border: 1px solid rgba(148, 163, 184, 0.4); color: inherit; }
       .glass-panel input::placeholder { color: rgba(226, 232, 240, 0.55); }
@@ -1621,15 +1614,14 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
       @keyframes gradientShift { 0% { transform: translate3d(0, 0, 0) scale(1); opacity: 0.55; } 50% { transform: translate3d(12px, -16px, 0) scale(1.1); opacity: 0.85; } 100% { transform: translate3d(-14px, 10px, 0) scale(1); opacity: 0.55; } }
       @keyframes pulse { 0% { transform: scale(1); opacity: 1; } 100% { transform: scale(2.4); opacity: 0; } }
       @media (max-width: 768px) {
-        .timeline::before { left: 24px; }
-        .timeline-item { margin-left: 0; padding-left: 64px; }
-        .timeline-item::before { left: 12px; }
+        .chat-entry { max-width: 100%; }
+        .chat-bubble { font-size: 0.92rem; padding: 16px 18px; }
       }
       @media (prefers-reduced-motion: reduce) {
         [data-animate] { opacity: 1 !important; transform: none !important; }
         [data-tilt] { transform: none !important; }
         [data-typewriter]::after { display: none !important; }
-        .word-fade span { opacity: 1 !important; transform: none !important; }
+        .word-fade { opacity: 1 !important; transform: none !important; }
         .floating-badge { animation: none !important; }
       }
     </style>
