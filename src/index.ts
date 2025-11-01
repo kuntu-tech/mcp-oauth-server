@@ -732,6 +732,7 @@ const buildFirebaseUiSnippet = (mode: FirebaseUiMode = "auth"): string => {
 
 type AppOverviewOptions = {
   clientId?: string;
+  mcpUrl?: string;
   app?: App;
   client?: Client;
   error?: string;
@@ -961,6 +962,7 @@ const iconX = (className?: string): string =>
 const renderLandingPage = (options: AppOverviewOptions): string => {
   const {
     clientId,
+    mcpUrl,
     app,
     client,
     error,
@@ -979,6 +981,9 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
     CONFIG.adminContact && CONFIG.adminContact.trim().length > 0
       ? CONFIG.adminContact
       : "mailto:admin@example.com";
+  const contactLabel = contactLink.startsWith("mailto:")
+    ? contactLink.replace(/^mailto:/, "")
+    : contactLink.replace(/^https?:\/\//, "");
   const landingPageContent = deriveLandingPageContent(options.app?.meta_info);
   const appName =
     landingPageContent.app.name && landingPageContent.app.name.trim().length > 0
@@ -990,15 +995,6 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
     landingPageContent.app.tagline.trim().length > 0
       ? landingPageContent.app.tagline.trim()
       : undefined;
-  const heroSubtitle = heroTagline ?? landingPageContent.app.description;
-  const heroSubtitleClass = heroTagline
-    ? "text-lg md:text-2xl text-gray-600 mb-4 leading-relaxed"
-    : "text-lg md:text-2xl text-gray-600 mb-8 leading-relaxed";
-  const heroDescriptionParagraph = heroTagline
-    ? `<p class="text-base md:text-lg text-gray-600 mb-8 leading-relaxed">${escapeHtml(
-        landingPageContent.app.description
-      )}</p>`
-    : "";
   const appInitial = appName.charAt(0).toUpperCase() || "S";
 
   const defaultFeatureIcons: Array<(className?: string) => string> = [
@@ -1013,52 +1009,35 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
       const iconRenderer =
         defaultFeatureIcons[index % defaultFeatureIcons.length];
       return `
-        <div class="p-6 bg-white/70 backdrop-blur-sm border border-slate-200 rounded-2xl shadow-sm hover:shadow-lg transition-shadow">
-          <div class="w-12 h-12 bg-gray-900 text-white rounded-xl flex items-center justify-center mb-4">
-            ${iconRenderer()}
+        <article class="glow-card" data-animate="fade-up" style="--delay:${index * 80}ms" data-tilt>
+          <div class="icon-wrapper">
+            ${iconRenderer("w-6 h-6")}
           </div>
-          <h3 class="text-xl font-semibold text-gray-900 mb-2">${escapeHtml(feature.title)}</h3>
-          <p class="text-gray-600 text-sm md:text-base leading-relaxed">${escapeHtml(feature.description)}</p>
-        </div>
+          <h3 class="text-xl font-semibold text-slate-900 mb-3">${escapeHtml(feature.title)}</h3>
+          <p class="text-slate-600 leading-relaxed text-sm md:text-base">${escapeHtml(feature.description)}</p>
+        </article>
       `;
     })
     .join("");
 
-  const conversationEntries = landingPageContent.howItWorks.flatMap((item) => {
-    const question = trimOrUndefined(item.question);
-    const answer = trimOrUndefined(item.answer);
-    const entries: Array<{ type: "user" | "bot"; message: string }> = [];
-    if (question) {
-      entries.push({ type: "user", message: question });
-    }
-    if (answer) {
-      entries.push({ type: "bot", message: answer });
-    }
-    return entries;
-  });
-
-  const howItWorksHtml = conversationEntries
-    .map((entry) => {
-      const isUser = entry.type === "user";
-      const alignmentClass = isUser ? "justify-end" : "justify-start";
-      const rowDirection = isUser ? "flex-row-reverse" : "";
-      const bubbleClass = isUser
-        ? "bg-gray-900 text-white shadow-lg border border-gray-800"
-        : "bg-white text-gray-800 shadow-lg border border-gray-200";
-      const iconWrapperClass = isUser ? "bg-gray-800" : "bg-gray-900";
-      const icon = isUser
-        ? iconMessageCircle("w-5 h-5 text-white")
-        : iconBot("w-5 h-5 text-white");
+  const howItWorksHtml = landingPageContent.howItWorks
+    .map((item, index) => {
+      const question = trimOrUndefined(item.question);
+      const answer = trimOrUndefined(item.answer);
+      if (!question && !answer) {
+        return "";
+      }
+      const stepNumber = (index + 1).toString().padStart(2, "0");
+      const questionBlock = question
+        ? `<div class="chat-bubble">${escapeHtml(question)}</div>`
+        : "";
+      const answerBlock = answer
+        ? `<div class="chat-bubble assistant">${escapeHtml(answer)}</div>`
+        : "";
       return `
-        <div class="flex ${alignmentClass}">
-          <div class="flex items-start gap-3 max-w-2xl ${rowDirection}">
-            <div class="w-10 h-10 ${iconWrapperClass} rounded-full flex items-center justify-center shadow-md">
-              ${icon}
-            </div>
-            <div class="px-6 py-4 rounded-2xl ${bubbleClass}">
-              <p class="text-sm md:text-base leading-relaxed">${escapeHtml(entry.message)}</p>
-            </div>
-          </div>
+        <div class="timeline-item" data-step="${stepNumber}" data-animate="fade-up" style="--delay:${index * 90}ms">
+          ${questionBlock}
+          ${answerBlock}
         </div>
       `;
     })
@@ -1066,23 +1045,22 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
 
   const pendingAuthSummary = pendingAuth
     ? `
-      <div class="p-6 bg-indigo-50 border border-indigo-200 rounded-2xl shadow-sm mb-6">
-        <p class="text-xs font-semibold uppercase tracking-wide text-indigo-600">Pending authorization request</p>
-        <p class="mt-3 text-base text-indigo-900">
+      <div class="pending-card" data-animate="fade-up">
+        <span class="pending-badge">
+          ${iconSparkles("w-4 h-4")}
+          Pending authorization
+        </span>
+        <p class="mt-3 text-sm md:text-base text-indigo-900 leading-relaxed">
           The client <span class="font-semibold">${escapeHtml(
             pendingAuth.clientName
-          )}</span> will be authorized with the following permissions, and will redirect back after completion:
+          )}</span> will be authorized with the following permissions before redirecting to
+          <code>${escapeHtml(pendingAuth.redirectUri)}</code>.
         </p>
-        <p class="mt-2 text-sm text-indigo-800 break-all">
-          <code class="bg-white/60 px-1.5 py-0.5 rounded">${escapeHtml(
-            pendingAuth.redirectUri
-          )}</code>
-        </p>
-        <div class="mt-3 flex flex-wrap gap-2">
+        <div class="flex flex-wrap gap-2 mt-4">
           ${pendingAuth.scopes
             .map(
-              (scope) =>
-                `<span class="px-3 py-1 text-xs font-medium rounded-full bg-indigo-100 text-indigo-700">${escapeHtml(
+              (scope, scopeIndex) =>
+                `<span class="badge-soft" style="--delay:${scopeIndex * 40}ms">${escapeHtml(
                   scope
                 )}</span>`
             )
@@ -1093,22 +1071,22 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
     : "";
 
   let clientDetails = `
-    <div class="p-8 bg-white border border-gray-200 rounded-2xl shadow-sm">
-      <h3 class="text-2xl font-semibold text-gray-900 mb-4">Application information</h3>
-      <p class="text-gray-600 leading-relaxed">
-        Use the query panel on the right to input <code class="px-1.5 py-0.5 bg-slate-100 rounded text-sm text-slate-700">client_id</code>, to view the resources and permissions bound to the client.
+    <div class="info-panel" data-animate="fade-up">
+      <h3 class="text-2xl font-semibold text-slate-900 mb-3">Application information</h3>
+      <p class="text-slate-600 leading-relaxed">
+        Use the query panel on the right to input <code>client_id</code> or provide the <code>mcpUrl</code> of your MCP server to view the resources and permissions bound to the client.
       </p>
     </div>
   `;
 
   if (clientId && !app && !client && !error) {
     clientDetails = `
-      <div class="p-8 bg-white border border-gray-200 rounded-2xl shadow-sm">
-        <h3 class="text-2xl font-semibold text-gray-900 mb-4">Client not found</h3>
-        <p class="text-rose-600 text-base">
-          No client record found for client_id <code class="px-1.5 py-0.5 bg-rose-50 rounded text-sm text-rose-700">${escapeHtml(
+      <div class="info-panel border border-rose-200/70" data-animate="fade-up">
+        <h3 class="text-2xl font-semibold text-rose-600 mb-3">Client not found</h3>
+        <p class="text-rose-500 text-base leading-relaxed">
+          No client record found for client_id <code>${escapeHtml(
             clientId
-          )}</code> client record.
+          )}</code>.
         </p>
       </div>
     `;
@@ -1116,9 +1094,9 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
 
   if (error) {
     clientDetails = `
-      <div class="p-8 bg-white border border-rose-200 rounded-2xl shadow-sm">
-        <h3 class="text-2xl font-semibold text-gray-900 mb-4">Load failed</h3>
-        <p class="text-rose-600 text-base">${escapeHtml(error)}</p>
+      <div class="info-panel border border-rose-200/70" data-animate="fade-up">
+        <h3 class="text-2xl font-semibold text-rose-600 mb-3">Load failed</h3>
+        <p class="text-rose-500 text-base leading-relaxed">${escapeHtml(error)}</p>
       </div>
     `;
   }
@@ -1128,55 +1106,55 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
     const scopesList = scopes.length
       ? scopes
           .map(
-            (scope) =>
-              `<span class="inline-flex items-center justify-center px-3 py-1 bg-indigo-50 text-indigo-600 rounded-full text-xs font-medium">${escapeHtml(
+            (scope, scopeIndex) =>
+              `<span class="badge-soft" style="--delay:${scopeIndex * 40}ms">${escapeHtml(
                 scope
               )}</span>`
           )
           .join("")
-      : '<span class="text-sm text-gray-500">The application has not configured default scopes.</span>';
+      : '<span class="text-sm text-slate-500">The application has not configured default scopes.</span>';
     const redirectList = client.redirect_uris.length
       ? client.redirect_uris
           .map(
             (uri) =>
-              `<li class="text-sm text-gray-700 break-all"><code class="bg-slate-100 rounded px-1.5 py-0.5">${escapeHtml(
+              `<li class="text-sm text-slate-600 break-all"><code>${escapeHtml(
                 uri
               )}</code></li>`
           )
           .join("")
-      : '<li class="text-sm text-gray-500">The client has not configured redirect URIs.</li>';
+      : '<li class="text-sm text-slate-500">The client has not configured redirect URIs.</li>';
     clientDetails = `
-      <div class="p-8 bg-white border border-gray-200 rounded-2xl shadow-sm space-y-4">
-        <div>
-          <h3 class="text-2xl font-semibold text-gray-900 mb-1">${escapeHtml(app.name)}</h3>
+      <div class="info-panel space-y-5" data-animate="fade-up">
+        <div class="flex flex-col gap-2">
+          <h3 class="text-2xl font-semibold text-slate-900">${escapeHtml(app.name)}</h3>
           ${
             client.client_name
-              ? `<p class="text-gray-600">Client name: <span class="font-medium text-gray-900">${escapeHtml(
+              ? `<p class="text-slate-500 text-sm">Client name: <span class="font-medium text-slate-800">${escapeHtml(
                   client.client_name
                 )}</span></p>`
               : ""
           }
         </div>
         <div class="grid md:grid-cols-2 gap-4">
-          <div class="space-y-2">
-            <p class="text-sm text-gray-500 uppercase tracking-wide">Client ID</p>
-            <p class="text-base text-gray-900 break-all"><code class="bg-slate-100 rounded px-1.5 py-0.5">${escapeHtml(
+          <div class="p-4 rounded-xl border border-slate-200/60 bg-white/60">
+            <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Client ID</p>
+            <p class="mt-2 font-mono text-sm break-all text-slate-800">${escapeHtml(
               client.client_id
-            )}</code></p>
+            )}</p>
           </div>
-          <div class="space-y-2">
-            <p class="text-sm text-gray-500 uppercase tracking-wide">Resource URI</p>
-            <p class="text-base text-gray-900 break-all"><code class="bg-slate-100 rounded px-1.5 py-0.5">${escapeHtml(
+          <div class="p-4 rounded-xl border border-slate-200/60 bg-white/60">
+            <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Resource URI</p>
+            <p class="mt-2 font-mono text-sm break-all text-slate-800">${escapeHtml(
               app.resource_uri
-            )}</code></p>
+            )}</p>
           </div>
         </div>
-        <div class="space-y-2">
-          <p class="text-sm text-gray-500 uppercase tracking-wide">Default scopes</p>
+        <div>
+          <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400 mb-2">Default scopes</p>
           <div class="flex flex-wrap gap-2">${scopesList}</div>
         </div>
-        <div class="space-y-2">
-          <p class="text-sm text-gray-500 uppercase tracking-wide">Redirect URIs</p>
+        <div>
+          <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400 mb-2">Redirect URIs</p>
           <ul class="space-y-1">${redirectList}</ul>
         </div>
       </div>
@@ -1184,7 +1162,6 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
   }
 
   const clientDetailsBlock = pendingAuthSummary + clientDetails;
-
 
   const firebaseModal = hasFirebase
     ? `
@@ -1225,41 +1202,53 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
     : "";
 
   const heroSection = `
-    <section id="hero" class="relative overflow-hidden">
-      <div class="absolute inset-0 bg-gradient-to-br from-sky-100 via-white to-indigo-100"></div>
-      <div class="absolute -top-24 -right-24 w-72 h-72 bg-sky-200 rounded-full blur-3xl opacity-70"></div>
-      <div class="absolute -bottom-24 -left-10 w-80 h-80 bg-indigo-200 rounded-full blur-3xl opacity-60"></div>
-      <div class="relative max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-24 md:py-32">
-        <div class="max-w-3xl">
-          <h1 class="text-4xl md:text-6xl font-bold text-gray-900 mb-6 leading-tight">
-            ${escapeHtml(heroTitle)}
-          </h1>
-          <p class="${heroSubtitleClass}">
-            ${escapeHtml(heroSubtitle)}
-          </p>
-          ${heroDescriptionParagraph}
-          <div class="flex flex-col sm:flex-row sm:items-center gap-4">
-            <a href="${escapeHtml(
-              docsUrl
-            )}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center gap-2 px-8 py-3 bg-gray-900 text-white font-semibold rounded-lg shadow-lg hover:bg-black transition-colors">
-              <span>Use Now in ChatGPT</span>
-              ${iconArrowRight("w-5 h-5")}
-            </a>
-          </div>
+    <section class="hero-section relative overflow-hidden pt-28 md:pt-32 pb-20">
+      <div class="hero-decoration" aria-hidden="true">
+        <span></span>
+        <span></span>
+        <span></span>
+      </div>
+      <div class="relative max-w-5xl mx-auto px-6 text-center space-y-6">
+        
+        <h1 class="text-4xl md:text-6xl font-bold leading-tight text-slate-900 word-fade" data-animate-words>
+          ${escapeHtml(heroTitle)}
+        </h1>
+        ${
+          heroTagline
+            ? `<p class="max-w-2xl mx-auto text-lg md:text-2xl text-slate-700 word-fade" data-animate-words style="--delay: 80ms">
+            ${escapeHtml(heroTagline)}
+          </p>`
+            : ""
+        }
+        <p class="max-w-3xl mx-auto text-base md:text-lg text-slate-600 leading-relaxed" data-typewriter>
+          ${escapeHtml(landingPageContent.app.description)}
+        </p>
+        <div class="flex flex-col sm:flex-row items-center justify-center gap-3 mt-6" data-animate="fade-up" style="--delay: 160ms">
+          <a href="${escapeHtml(
+            docsUrl
+          )}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 rounded-full px-7 py-3 bg-slate-900 text-white font-semibold shadow-lg shadow-indigo-200/40 hover:bg-black transition">
+            <span>Use Now in ChatGPT</span>
+            ${iconArrowRight("w-5 h-5")}
+          </a>
+          ${
+            hasFirebase
+              ? `<button type="button" data-open-firebase class="inline-flex items-center gap-2 rounded-full px-7 py-3 border border-slate-300/70 bg-white/80 text-slate-800 font-semibold shadow-sm hover:border-slate-400 transition">
+                <span>Sign in to Continue</span>
+              </button>`
+              : ""
+          }
         </div>
       </div>
     </section>
   `;
 
   const featureSection = `
-    <section id="features" class="py-20 bg-white">
-      <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="text-center max-w-2xl mx-auto mb-16">
-          <h2 class="text-3xl md:text-4xl font-bold text-gray-900 mb-4">Core Features</h2>
-          <p class="text-lg text-gray-600">
-            Powerful features providing you with an exceptional experience
-          </p>
-        </div>
+    <section id="features" class="py-20 bg-transparent">
+      <div class="max-w-6xl mx-auto px-6">
+        <h2 class="section-title" data-animate="fade-up">Core Capabilities</h2>
+        <p class="section-subtitle" data-animate="fade-up" style="--delay: 60ms">
+          Powerful features providing you with an exceptional experience
+        </p>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
           ${featuresHtml}
         </div>
@@ -1268,12 +1257,10 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
   `;
 
   const howItWorksSection = `
-    <section id="how-it-works" class="py-20 bg-slate-50">
-      <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="text-center mb-16">
-          <h2 class="text-3xl md:text-4xl font-bold text-gray-900 mb-4">How It Works</h2>
-        </div>
-        <div class="space-y-6">
+    <section id="how-it-works" class="py-20 bg-slate-50/60">
+      <div class="max-w-4xl mx-auto px-6">
+        <h2 class="section-title" data-animate="fade-up">How It Works</h2>
+        <div class="timeline mt-12 space-y-6">
           ${howItWorksHtml}
         </div>
       </div>
@@ -1281,35 +1268,47 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
   `;
 
   const clientOverviewSection = `
-    <section id="overview" class="py-20 bg-white">
-      <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="grid lg:grid-cols-[1fr,1fr] gap-10">
-          ${clientDetailsBlock}
-          <div class="p-8 bg-slate-900 text-white rounded-2xl shadow-2xl">
+    <section id="overview" class="py-20 bg-transparent">
+      <div class="max-w-6xl mx-auto px-6">
+        <div class="grid lg:grid-cols-[1.1fr,0.9fr] gap-10">
+          <div class="space-y-6">
+            ${clientDetailsBlock}
+          </div>
+          <div class="glass-panel" data-animate="fade-up" style="--delay: 140ms">
             <h3 class="text-2xl font-semibold mb-4">Query client</h3>
-            <p class="text-slate-300 text-sm leading-relaxed mb-6">
-              Input the <span class="font-semibold">client_id</span> you want to view, to load the registration information and default scopes of the client.
+            <p class="text-slate-200/80 text-sm leading-relaxed mb-6">
+              Provide a <span class="font-semibold">client_id</span> or the <span class="font-semibold">mcpUrl</span> associated with your MCP server to load the registration information and default scopes of the client.
             </p>
             <form method="get" action="/" class="space-y-4">
-              <label class="block">
-                <span class="text-sm text-slate-200 uppercase tracking-wide">Client ID</span>
+              <label class="block text-xs font-semibold uppercase tracking-[0.22em] text-slate-300">
+                Client ID
                 <input
                   type="text"
                   name="client_id"
                   value="${clientId ? escapeHtml(clientId) : ""}"
                   placeholder="Input client_id"
-                  class="mt-1 w-full px-4 py-3 rounded-lg bg-white text-gray-900 placeholder:text-gray-400 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-white/60"
+                  class="mt-2 block w-full rounded-xl px-4 py-3 bg-transparent border focus:outline-none focus:ring-2 focus:ring-indigo-200/70"
+                />
+              </label>
+              <label class="block text-xs font-semibold uppercase tracking-[0.22em] text-slate-300">
+                MCP URL
+                <input
+                  type="text"
+                  name="mcpUrl"
+                  value="${mcpUrl ? escapeHtml(mcpUrl) : ""}"
+                  placeholder="Input MCP server URL"
+                  class="mt-2 block w-full rounded-xl px-4 py-3 bg-transparent border focus:outline-none focus:ring-2 focus:ring-indigo-200/70"
                 />
               </label>
               <button
                 type="submit"
-                class="w-full inline-flex items-center justify-center gap-2 px-6 py-3 bg-white text-gray-900 font-semibold rounded-lg hover:bg-slate-100 transition-colors"
+                class="w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-white text-slate-900 font-semibold hover:bg-slate-100 transition"
               >
                 View client details
               </button>
             </form>
-            <p class="mt-6 text-xs text-slate-400 leading-relaxed">
-              Tip: The <code class="bg-white/10 px-1.5 py-0.5 rounded text-white">?client_id=</code> parameter in the OAuth callback can also directly jump to the query results of this page.
+            <p class="mt-6 text-xs text-slate-300/80 leading-relaxed">
+              Tip: The <code>?client_id=</code> or <code>&amp;mcpUrl=</code> parameters in the OAuth callback can jump directly to the query results of this page.
             </p>
           </div>
         </div>
@@ -1318,18 +1317,18 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
   `;
 
   const footerSection = `
-    <footer class="bg-black text-white py-12">
-      <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-4">
-        <p class="text-gray-400 text-sm">
+    <footer class="bg-slate-950 text-white py-12 mt-24">
+      <div class="max-w-6xl mx-auto px-6 text-center space-y-3">
+        <p class="text-sm text-slate-300">
           © ${new Date().getFullYear()} ${escapeHtml(appName)}. All rights reserved.
         </p>
-        <!-- <p class="text-sm text-gray-500">
-          If you need support, please contact <a href="${escapeHtml(
+        <p class="text-xs text-slate-500">
+          Need support? <a href="${escapeHtml(
             contactLink
-          )}" class="text-white font-semibold hover:text-gray-300 transition-colors">${escapeHtml(
-    contactLink.replace(/^mailto:/, "")
+          )}" class="text-indigo-300 font-medium hover:text-indigo-200 transition">${escapeHtml(
+    contactLabel
   )}</a>
-        </p>-->
+        </p>
       </div>
     </footer>
   `;
@@ -1352,10 +1351,202 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
   const firebaseSnippet = hasFirebase ? buildFirebaseUiSnippet("auth") : "";
 
   const headerAction = currentUserEmail
-    ? `<span class="text-sm text-gray-600">Logged in: <span class="font-semibold text-gray-900">${escapeHtml(
+    ? `<span class="text-sm font-medium text-slate-600 bg-white/70 rounded-full px-4 py-1.5 border border-slate-200 shadow-sm">Logged in: <span class="font-semibold text-slate-900">${escapeHtml(
         currentUserEmail
       )}</span></span>`
-    : ``;
+    : hasFirebase
+    ? `<button type="button" data-open-firebase class="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-slate-200 bg-white/70 text-slate-700 font-semibold shadow-sm hover:border-slate-300 transition">
+        <span>Sign in</span>
+      </button>`
+    : `<a href="${escapeHtml(
+        docsUrl
+      )}" class="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-slate-200 bg-white/70 text-slate-700 font-semibold shadow-sm hover:border-slate-300 transition">
+        Documentation
+      </a>`;
+
+  const animationScript = `
+    <script>
+      (function () {
+        const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        const wordElements = Array.from(document.querySelectorAll("[data-animate-words]"));
+
+        wordElements.forEach((element) => {
+          const text = (element.textContent || "").trim();
+          if (!text) {
+            return;
+          }
+          const words = text.split(/\s+/);
+          if (words.length <= 1) {
+            element.dataset.singleWord = "true";
+            element.innerHTML = "";
+            const span = document.createElement("span");
+            span.textContent = text;
+            span.classList.add("is-visible");
+            element.appendChild(span);
+            return;
+          }
+          element.innerHTML = "";
+          words.forEach((word, index) => {
+            const span = document.createElement("span");
+            span.textContent = word;
+            span.style.setProperty("--index", String(index));
+            element.appendChild(span);
+            if (index !== words.length - 1) {
+              element.appendChild(document.createTextNode(" "));
+            }
+          });
+        });
+
+        const revealWordElement = (element) => {
+          const spans = element.querySelectorAll("span");
+          spans.forEach((span, index) => {
+            const delay = index * 60;
+            span.style.setProperty("--delay", delay + "ms");
+            setTimeout(() => span.classList.add("is-visible"), delay);
+          });
+        };
+
+        const typewriterElements = Array.from(document.querySelectorAll("[data-typewriter]"));
+        typewriterElements.forEach((element) => {
+          const text = (element.textContent || "").trim();
+          element.setAttribute("data-typewriter-text", text);
+          element.textContent = "";
+        });
+
+        const playTypewriter = (element) => {
+          if (element.classList.contains("is-complete")) {
+            return;
+          }
+          const text = element.getAttribute("data-typewriter-text") || "";
+          let index = 0;
+          const tick = () => {
+            element.textContent = text.slice(0, index);
+            index += 1;
+            if (index <= text.length) {
+              setTimeout(tick, 18);
+            } else {
+              element.classList.add("is-complete");
+              element.textContent = text;
+            }
+          };
+          tick();
+        };
+
+        const animatedElements = Array.from(document.querySelectorAll("[data-animate]"));
+
+        if (prefersReduced) {
+          animatedElements.forEach((el) => el.classList.add("is-visible"));
+          wordElements.forEach((element) => {
+            element.querySelectorAll("span").forEach((span) => span.classList.add("is-visible"));
+          });
+          typewriterElements.forEach((element) => {
+            element.textContent = element.getAttribute("data-typewriter-text") || "";
+            element.classList.add("is-complete");
+          });
+          return;
+        }
+
+        const observer = new IntersectionObserver(
+          (entries, obs) => {
+            entries.forEach((entry) => {
+              if (!entry.isIntersecting) {
+                return;
+              }
+              const target = entry.target;
+              const explicitDelay = target.getAttribute("data-delay");
+              const styleDelay = target.style.getPropertyValue("--delay");
+              const delay = explicitDelay ? parseInt(explicitDelay, 10) : parseInt(styleDelay || "0", 10);
+              if (delay) {
+                setTimeout(() => target.classList.add("is-visible"), delay);
+              } else {
+                target.classList.add("is-visible");
+              }
+              obs.unobserve(target);
+            });
+          }
+        );
+
+        animatedElements.forEach((element) => observer.observe(element));
+
+        wordElements.forEach((element) => {
+          if (element.dataset.singleWord === "true") {
+            return;
+          }
+          const wordObserver = new IntersectionObserver(
+            (entries, wordObs) => {
+              entries.forEach((entry) => {
+                if (!entry.isIntersecting) {
+                  return;
+                }
+                revealWordElement(element);
+                wordObs.unobserve(entry.target);
+              });
+            },
+            { threshold: 0.6, rootMargin: "0px 0px -20% 0px" }
+          );
+          wordObserver.observe(element);
+        });
+
+        typewriterElements.forEach((element) => {
+          const typeObserver = new IntersectionObserver(
+            (entries, typeObs) => {
+              entries.forEach((entry) => {
+                if (!entry.isIntersecting) {
+                  return;
+                }
+                playTypewriter(element);
+                typeObs.unobserve(entry.target);
+              });
+            },
+            { threshold: 0.35 }
+          );
+          typeObserver.observe(element);
+        });
+
+        const tiltTargets = Array.from(document.querySelectorAll("[data-tilt]"));
+        if (tiltTargets.length) {
+          let rafId = 0;
+          const resetTilt = (element) => {
+            element.style.setProperty("--tilt-x", "0deg");
+            element.style.setProperty("--tilt-y", "0deg");
+          };
+          document.addEventListener("pointermove", (event) => {
+            if (rafId) {
+              cancelAnimationFrame(rafId);
+            }
+            rafId = requestAnimationFrame(() => {
+              tiltTargets.forEach((card) => {
+                const rect = card.getBoundingClientRect();
+                if (!rect.width || !rect.height) {
+                  return;
+                }
+                const relativeX = (event.clientX - rect.left) / rect.width - 0.5;
+                const relativeY = (event.clientY - rect.top) / rect.height - 0.5;
+                const rotateX = (relativeY * -8).toFixed(2);
+                const rotateY = (relativeX * 8).toFixed(2);
+                card.style.setProperty("--tilt-x", rotateX + "deg");
+                card.style.setProperty("--tilt-y", rotateY + "deg");
+              });
+            });
+          });
+          document.addEventListener("pointerleave", () => {
+            tiltTargets.forEach(resetTilt);
+          });
+          tiltTargets.forEach((card) => {
+            card.addEventListener("mouseleave", () => resetTilt(card));
+          });
+        }
+
+        document.querySelectorAll("[data-open-firebase]").forEach((button) => {
+          button.addEventListener("click", () => {
+            if (typeof window.__openFirebaseModal === "function") {
+              window.__openFirebaseModal();
+            }
+          });
+        });
+      })();
+    </script>
+  `;
 
   return `
 <!DOCTYPE html>
@@ -1380,21 +1571,87 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
       };
     </script>
     <style>
-      body { font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      body { font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%); color: #0f172a; }
       ::selection { background: rgba(79, 70, 229, 0.2); }
+      main { overflow: hidden; }
+      [data-animate] { opacity: 0; transform: translateY(24px) scale(0.98); transition: opacity 0.6s ease, transform 0.6s ease; }
+      [data-animate].is-visible { opacity: 1; transform: none; }
+      .word-fade span { opacity: 0; display: inline-block; transform: translateY(12px); transition: opacity 0.45s ease, transform 0.45s ease; }
+      .word-fade span.is-visible { opacity: 1; transform: translateY(0); }
+      [data-typewriter] { position: relative; min-height: 1.6em; }
+      [data-typewriter]::after { content: ""; position: absolute; width: 2px; height: 1.1em; background: currentColor; right: -6px; top: 50%; transform: translateY(-50%); animation: blink 1s steps(1) infinite; }
+      [data-typewriter].is-complete::after { display: none; }
+      .hero-section { position: relative; }
+      .hero-decoration { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+      .hero-decoration span { position: absolute; border-radius: 999px; filter: blur(90px); opacity: 0.65; }
+      .hero-decoration span:nth-child(1) { background: rgba(129, 140, 248, 0.6); width: 420px; height: 420px; top: -160px; right: -100px; animation: gradientShift 18s ease-in-out infinite; }
+      .hero-decoration span:nth-child(2) { background: rgba(56, 189, 248, 0.5); width: 380px; height: 380px; bottom: -140px; left: -80px; animation: gradientShift 20s ease-in-out infinite reverse; }
+      .hero-decoration span:nth-child(3) { background: rgba(59, 130, 246, 0.45); width: 320px; height: 320px; top: 30%; left: 50%; transform: translate(-50%, -50%); animation: gradientShift 22s ease-in-out infinite; }
+      .floating-badge { animation: float 6s ease-in-out infinite; }
+      .pulse-indicator { width: 10px; height: 10px; border-radius: 999px; background: #6366f1; position: relative; }
+      .pulse-indicator::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: rgba(99, 102, 241, 0.4); animation: pulse 2s ease-out infinite; }
+      .glow-card { position: relative; border-radius: 24px; padding: 28px; background: rgba(255, 255, 255, 0.8); border: 1px solid rgba(99, 102, 241, 0.12); box-shadow: 0 25px 45px rgba(79, 70, 229, 0.08); overflow: hidden; transform: perspective(1000px) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg)); transition: transform 0.3s ease, box-shadow 0.3s ease; }
+      .glow-card::before { content: ""; position: absolute; inset: -1px; border-radius: inherit; background: radial-gradient(circle at 0% 0%, rgba(79, 70, 229, 0.35), transparent 55%); opacity: 0; transition: opacity 0.4s ease; }
+      .glow-card:hover::before { opacity: 1; }
+      .glow-card:hover { box-shadow: 0 35px 65px rgba(79, 70, 229, 0.18); }
+      .glow-card .icon-wrapper { width: 52px; height: 52px; border-radius: 16px; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, rgba(79, 70, 229, 0.12), rgba(129, 140, 248, 0.32)); color: #312e81; margin-bottom: 18px; }
+      .timeline { position: relative; }
+      .timeline::before { content: ""; position: absolute; top: 0; bottom: 0; left: 50%; transform: translateX(-50%); width: 2px; background: linear-gradient(to bottom, rgba(99, 102, 241, 0.1), rgba(99, 102, 241, 0.25)); }
+      .timeline-item { position: relative; max-width: 540px; margin: 0 auto; border-radius: 18px; background: rgba(255, 255, 255, 0.88); border: 1px solid rgba(15, 23, 42, 0.08); box-shadow: 0 20px 40px rgba(15, 23, 42, 0.06); padding: 32px 28px 28px; }
+      .timeline-item + .timeline-item { margin-top: 24px; }
+      .timeline-item::before { content: attr(data-step); position: absolute; top: -14px; left: 24px; display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 14px; background: #1d4ed8; color: #ffffff; font-size: 0.85rem; font-weight: 600; box-shadow: 0 15px 25px rgba(29, 78, 216, 0.22); }
+      .chat-bubble { margin-top: 8px; padding: 18px 20px; border-radius: 18px; background: rgba(248, 250, 252, 0.9); font-size: 0.95rem; line-height: 1.6; color: #0f172a; }
+      .chat-bubble.assistant { background: linear-gradient(135deg, rgba(79, 70, 229, 0.12), rgba(129, 140, 248, 0.2)); color: #1f2937; }
+      .glass-panel { background: rgba(15, 23, 42, 0.85); color: #e0e7ff; border-radius: 24px; padding: 32px; border: 1px solid rgba(148, 163, 184, 0.2); box-shadow: 0 35px 65px rgba(15, 23, 42, 0.45); }
+      .glass-panel input { background: rgba(15, 23, 42, 0.55); border: 1px solid rgba(148, 163, 184, 0.4); color: inherit; }
+      .glass-panel input::placeholder { color: rgba(226, 232, 240, 0.55); }
+      .glass-panel button { background: #e0e7ff; color: #1f2937; }
+      .info-panel { background: rgba(255, 255, 255, 0.88); border-radius: 24px; padding: 32px; border: 1px solid rgba(99, 102, 241, 0.15); box-shadow: 0 25px 45px rgba(79, 70, 229, 0.1); }
+      .info-panel code { background: rgba(15, 23, 42, 0.08); padding: 0.25rem 0.5rem; border-radius: 0.75rem; font-size: 0.85rem; }
+      .badge-soft { display: inline-flex; align-items: center; justify-content: center; padding: 0.4rem 0.85rem; border-radius: 999px; background: rgba(79, 70, 229, 0.12); color: #3730a3; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.04em; }
+      .pending-badge { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.4rem 0.75rem; border-radius: 999px; font-size: 0.75rem; letter-spacing: 0.05em; text-transform: uppercase; background: rgba(99, 102, 241, 0.15); color: #312e81; font-weight: 600; }
+      .pending-card code { background: rgba(79, 70, 229, 0.12); color: #312e81; border-radius: 0.75rem; padding: 0.25rem 0.5rem; }
+      .section-title { font-size: clamp(2rem, 3vw, 2.8rem); font-weight: 700; color: #0f172a; text-align: center; margin-bottom: 1.5rem; }
+      .section-subtitle { color: #475569; max-width: 640px; margin: 0 auto 3rem; text-align: center; }
+      footer p { color: rgba(226, 232, 240, 0.9); }
+      nav a { color: #475569; transition: color 0.2s ease; }
+      nav a:hover { color: #312e81; }
+      @keyframes blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+      @keyframes float { 0% { transform: translateY(0); } 50% { transform: translateY(-10px); } 100% { transform: translateY(0); } }
+      @keyframes gradientShift { 0% { transform: translate3d(0, 0, 0) scale(1); opacity: 0.55; } 50% { transform: translate3d(12px, -16px, 0) scale(1.1); opacity: 0.85; } 100% { transform: translate3d(-14px, 10px, 0) scale(1); opacity: 0.55; } }
+      @keyframes pulse { 0% { transform: scale(1); opacity: 1; } 100% { transform: scale(2.4); opacity: 0; } }
+      @media (max-width: 768px) {
+        .timeline::before { left: 24px; }
+        .timeline-item { margin-left: 0; padding-left: 64px; }
+        .timeline-item::before { left: 12px; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        [data-animate] { opacity: 1 !important; transform: none !important; }
+        [data-tilt] { transform: none !important; }
+        [data-typewriter]::after { display: none !important; }
+        .word-fade span { opacity: 1 !important; transform: none !important; }
+        .floating-badge { animation: none !important; }
+      }
     </style>
   </head>
   <body class="bg-white text-gray-900">
-    <header class="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-gray-100">
-      <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="flex items-center justify-between py-4">
+    <header class="sticky top-0 z-40 bg-white/85 backdrop-blur border-b border-slate-100">
+      <div class="max-w-6xl mx-auto px-6">
+        <div class="flex items-center justify-between py-4 gap-3">
           <a href="/" class="flex items-center gap-3">
-            <span class="w-10 h-10 rounded-xl bg-gray-900 text-white flex items-center justify-center font-bold shadow-md">${escapeHtml(appInitial)}</span>
-            <span class="text-lg font-semibold text-gray-900">${escapeHtml(appName)}</span>
+            <span class="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center font-bold shadow-lg">${escapeHtml(
+              appInitial
+            )}</span>
+            <span class="text-lg font-semibold text-slate-900">${escapeHtml(appName)}</span>
           </a>
-          <div id="header-auth-status" class="flex items-center gap-4">
+          <!--<div class="flex items-center gap-5">
+            <nav class="hidden md:flex items-center gap-4 text-sm font-medium text-slate-600">
+              <a href="#features" class="hover:text-slate-900 transition">Features</a>
+              <a href="#how-it-works" class="hover:text-slate-900 transition">How it works</a>
+              <a href="#overview" class="hover:text-slate-900 transition">Clients</a>
+            </nav>
             ${headerAction}
-          </div>
+          </div>-->
         </div>
       </div>
     </header>
@@ -1407,11 +1664,11 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
     ${firebaseModal}
     ${authStateScript}
     ${firebaseSnippet}
+    ${animationScript}
   </body>
 </html>
   `;
 };
-
 const authorizationQuerySchema = z.object({
   response_type: z.literal("code"),
   client_id: z.string().min(1),
@@ -1664,6 +1921,11 @@ app.get("/", async (req, res) => {
     typeof clientIdParam === "string" && clientIdParam.trim().length > 0
       ? clientIdParam.trim()
       : undefined;
+  const mcpUrlParam = req.query.mcpUrl;
+  const mcpUrl =
+    typeof mcpUrlParam === "string" && mcpUrlParam.trim().length > 0
+      ? mcpUrlParam.trim()
+      : undefined;
 
   const authRequest = req.session.authRequest;
   if (!clientId && authRequest) {
@@ -1673,6 +1935,9 @@ app.get("/", async (req, res) => {
   const overviewOptions: AppOverviewOptions = {};
   if (clientId) {
     overviewOptions.clientId = clientId;
+  }
+  if (mcpUrl) {
+    overviewOptions.mcpUrl = mcpUrl;
   }
 
   let currentUserEmail: string | undefined;
@@ -1718,7 +1983,25 @@ app.get("/", async (req, res) => {
     }
   }
 
-  if (!overviewOptions.app) {
+  if (mcpUrl) {
+    try {
+      const appRecord = await findAppByResourceLocal(mcpUrl);
+      if (appRecord) {
+        if (!overviewOptions.app) {
+          overviewOptions.app = appRecord;
+        }
+      } else if (!clientId && !overviewOptions.error) {
+        overviewOptions.error = `No application record found for MCP URL ${mcpUrl}.`;
+      }
+    } catch (error) {
+      console.error("Failed to load app by MCP URL", error);
+      if (!overviewOptions.error) {
+        overviewOptions.error = "Failed to load app information, please try again later.";
+      }
+    }
+  }
+
+  if (!overviewOptions.app && !mcpUrl) {
     try {
       const apps = await listApps();
       const defaultAppRecord = selectDefaultApp(apps) ?? apps[0];
