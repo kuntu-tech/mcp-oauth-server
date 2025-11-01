@@ -1222,6 +1222,9 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
 
   const heroSection = `
     <section class="hero-section relative overflow-hidden min-h-screen flex items-center justify-center py-24 md:py-28">
+      <div class="absolute inset-0 overflow-hidden">
+        <div aria-hidden="true" class="hero-aurora"></div>
+      </div>
       <div class="hero-decoration" aria-hidden="true">
         <span></span>
         <span></span>
@@ -1543,6 +1546,22 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <script>
+      (function () {
+        const NativeMutationObserver = window.MutationObserver;
+        if (!NativeMutationObserver) {
+          return;
+        }
+        const originalObserve = NativeMutationObserver.prototype.observe;
+        NativeMutationObserver.prototype.observe = function (target, options) {
+          if (!(target instanceof Node)) {
+            console.warn("Skipped observing non-Node target", target);
+            return;
+          }
+          return originalObserve.call(this, target, options);
+        };
+      })();
+    </script>
     <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
     <script>
       tailwind.config = {
@@ -1556,6 +1575,16 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
       };
     </script>
     <style>
+      :root {
+        --white: #ffffff;
+        --black: #0f172a;
+        --transparent: rgba(255, 255, 255, 0);
+        --blue-500: #3b82f6;
+        --blue-400: #60a5fa;
+        --blue-300: #93c5fd;
+        --indigo-300: #a5b4fc;
+        --violet-200: #ddd6fe;
+      }
       body { font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%); color: #0f172a; }
       ::selection { background: rgba(79, 70, 229, 0.2); }
       main { overflow: hidden; }
@@ -1566,14 +1595,21 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
       [data-typewriter] { position: relative; min-height: 1.6em; }
       [data-typewriter]::after { content: ""; position: absolute; width: 2px; height: 1.1em; background: currentColor; right: -6px; top: 50%; transform: translateY(-50%); animation: blink 1s steps(1) infinite; }
       [data-typewriter].is-complete::after { display: none; }
-      .hero-section { position: relative; }
-      .hero-decoration { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+      .hero-section { position: relative; isolation: isolate; }
+      .hero-decoration { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 1; }
       .hero-decoration span { position: absolute; border-radius: 999px; filter: blur(90px); opacity: 0.65; }
       .hero-decoration span:nth-child(1) { background: rgba(129, 140, 248, 0.6); width: 420px; height: 420px; top: -160px; right: -100px; animation: gradientShift 18s ease-in-out infinite; }
       .hero-decoration span:nth-child(2) { background: rgba(56, 189, 248, 0.5); width: 380px; height: 380px; bottom: -140px; left: -80px; animation: gradientShift 20s ease-in-out infinite reverse; }
       .hero-decoration span:nth-child(3) { background: rgba(59, 130, 246, 0.45); width: 320px; height: 320px; top: 30%; left: 50%; transform: translate(-50%, -50%); animation: gradientShift 22s ease-in-out infinite; }
+      .hero-aurora { position: absolute; inset: -10px; z-index: 0; pointer-events: none; filter: blur(10px); opacity: 0.55; will-change: transform; --white-gradient: repeating-linear-gradient(100deg, rgba(255, 255, 255, 1) 0%, rgba(255, 255, 255, 1) 7%, rgba(255, 255, 255, 0) 10%, rgba(255, 255, 255, 0) 12%, rgba(255, 255, 255, 1) 16%); --dark-gradient: repeating-linear-gradient(100deg, rgba(15, 23, 42, 1) 0%, rgba(15, 23, 42, 1) 7%, rgba(15, 23, 42, 0) 10%, rgba(15, 23, 42, 0) 12%, rgba(15, 23, 42, 1) 16%); --aurora: repeating-linear-gradient(100deg, rgba(59, 130, 246, 1) 10%, rgba(165, 180, 252, 1) 15%, rgba(147, 197, 253, 1) 20%, rgba(221, 214, 254, 1) 25%, rgba(96, 165, 250, 1) 30%); background-image: var(--white-gradient), var(--aurora); background-size: 300%, 200%; background-position: 50% 50%, 50% 50%; mask-image: radial-gradient(ellipse at 100% 0%, rgba(0, 0, 0, 1) 10%, rgba(0, 0, 0, 0) 70%); animation: aurora 26s ease-in-out infinite; mix-blend-mode: screen; }
+      .hero-aurora::after { content: ""; position: absolute; inset: 0; background-image: var(--white-gradient), var(--aurora); background-size: 200%, 100%; background-position: 50% 50%, 50% 50%; animation: aurora 32s ease-in-out infinite reverse; mix-blend-mode: difference; opacity: 0.9; background-attachment: fixed; }
+      @media (prefers-color-scheme: dark) {
+        .hero-aurora,
+        .hero-aurora::after { background-image: var(--dark-gradient), var(--aurora); }
+        .hero-aurora { mix-blend-mode: lighten; opacity: 0.45; }
+      }
       .floating-badge { animation: float 6s ease-in-out infinite; }
-      .hero-copy { min-height: clamp(420px, 68vh, 680px); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.5rem; }
+      .hero-copy { position: relative; z-index: 2; min-height: clamp(420px, 68vh, 680px); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.5rem; }
       .hero-description { min-height: 3.2rem; display: flex; align-items: center; justify-content: center; text-align: center; }
       .pulse-indicator { width: 10px; height: 10px; border-radius: 999px; background: #6366f1; position: relative; }
       .pulse-indicator::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: rgba(99, 102, 241, 0.4); animation: pulse 2s ease-out infinite; }
@@ -1609,6 +1645,7 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
       footer p { color: rgba(226, 232, 240, 0.9); }
       nav a { color: #475569; transition: color 0.2s ease; }
       nav a:hover { color: #312e81; }
+      @keyframes aurora { 0% { background-position: 50% 50%, 50% 50%; } 50% { background-position: 46% 54%, 54% 46%; } 100% { background-position: 50% 50%, 50% 50%; } }
       @keyframes blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
       @keyframes float { 0% { transform: translateY(0); } 50% { transform: translateY(-10px); } 100% { transform: translateY(0); } }
       @keyframes gradientShift { 0% { transform: translate3d(0, 0, 0) scale(1); opacity: 0.55; } 50% { transform: translate3d(12px, -16px, 0) scale(1.1); opacity: 0.85; } 100% { transform: translate3d(-14px, 10px, 0) scale(1); opacity: 0.55; } }
