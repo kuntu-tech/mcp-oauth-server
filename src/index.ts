@@ -3126,7 +3126,10 @@ app.post("/oauth/token", async (req, res) => {
 });
 
 app.post("/oauth/register", async (req, res) => {
-  console.log("raw registration payload", req.body);
+  console.info(
+    "[oauth/register] incoming payload",
+    sanitizeForLogging(req.body)
+  );
   const parsed = registrationSchema.safeParse(req.body);
   if (!parsed.success) {
     return res
@@ -3135,13 +3138,42 @@ app.post("/oauth/register", async (req, res) => {
   }
   const data = parsed.data;
   const apps = await listApps();
-  console.log("apps from Supabase", apps);
+  console.info(
+    "[oauth/register] loaded apps for matching",
+    sanitizeForLogging(
+      apps.map((app) => ({
+        id: app.id,
+        name: app.name,
+        resource_uri: app.resource_uri,
+        mcp_server_ids: app.mcp_server_ids,
+      }))
+    )
+  );
   let appRecord: App | undefined;
   const resource = data.resource;
   if (resource) {
     appRecord = apps.find((app) => appMatchesResource(app, resource));
+    console.info(
+      "[oauth/register] matching result",
+      sanitizeForLogging({
+        resource,
+        matchedAppId: appRecord?.id,
+        matchedBy: appRecord
+          ? appMatchesResource(appRecord, resource)
+            ? "resource_or_mcp_server_id"
+            : "unknown"
+          : "none",
+      })
+    );
     if (!appRecord) {
       appRecord = selectDefaultApp(apps);
+      console.info(
+        "[oauth/register] fallback app selection",
+        sanitizeForLogging({
+          reason: "no_direct_match",
+          fallbackAppId: appRecord?.id,
+        })
+      );
     }
     if (!appRecord) {
       return res.status(400).json({
@@ -3152,6 +3184,10 @@ app.post("/oauth/register", async (req, res) => {
   } 
   else {
     appRecord = apps[0];
+    console.info(
+      "[oauth/register] resource missing, defaulting to first app",
+      sanitizeForLogging({ fallbackAppId: appRecord?.id })
+    );
     // console.log("appRecord from selectDefaultApp", appRecord);
     // if (!appRecord) {
     //   return res.status(400).json({
@@ -3171,6 +3207,22 @@ app.post("/oauth/register", async (req, res) => {
   }
   const canonicalScopes = canonicalizeScopes(validScopes);
   const scope = canonicalScopes.join(" ");
+  console.info(
+    "[oauth/register] creating client",
+    sanitizeForLogging({
+      appId: appRecord.id,
+      appName: appRecord.name,
+      resourceUsed: resource ?? appRecord.resource_uri,
+      payload: {
+        client_name: data.client_name,
+        application_type: data.application_type,
+        grant_types: data.grant_types,
+        redirect_uris: data.redirect_uris,
+        scope,
+        token_endpoint_auth_method: data.token_endpoint_auth_method,
+      },
+    })
+  );
   const client = await createClient({
     client_name: data.client_name,
     application_type: data.application_type,

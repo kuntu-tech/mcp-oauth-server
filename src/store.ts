@@ -7,6 +7,27 @@ const DEFAULT_SCOPE_FALLBACK = ["openid", "profile", "email"];
 
 type Nullable<T> = T | null | undefined;
 
+const logStoreEvent = (
+  event: string,
+  details?: Record<string, unknown>
+) => {
+  if (details) {
+    console.info(`[store] ${event}`, details);
+  } else {
+    console.info(`[store] ${event}`);
+  }
+};
+
+const redactSecret = (value?: string | null): string | null => {
+  if (!value) {
+    return null;
+  }
+  if (value.length <= 6) {
+    return "***";
+  }
+  return `${value.slice(0, 3)}…${value.slice(-3)} (len=${value.length})`;
+};
+
 type AppRow = {
   id: string;
   name: string;
@@ -635,6 +656,10 @@ const locateAppByClientId = async (
 };
 
 const updateAppConfig = async (appId: string, config: AppConfig) => {
+  logStoreEvent("updateAppConfig.start", {
+    appId,
+    clientsCount: appConfigClients(config).length,
+  });
   const { error } = await supabase
     .from("apps")
     .update({
@@ -645,6 +670,7 @@ const updateAppConfig = async (appId: string, config: AppConfig) => {
   if (error) {
     throw new Error(`Failed to update app config: ${error.message}`);
   }
+  logStoreEvent("updateAppConfig.success", { appId });
 };
 
 export const findUserByEmail = async (
@@ -893,6 +919,12 @@ export const createClient = async (
     throw new Error(`App ${client.app_uuid} not found.`);
   }
 
+  logStoreEvent("createClient.matchedApp", {
+    appId: app.id,
+    appName: app.name,
+    requestedAppUuid: client.app_uuid,
+  });
+
   const configClone: AppConfig = JSON.parse(
     JSON.stringify(app.config ?? {})
   );
@@ -929,11 +961,30 @@ export const createClient = async (
     client_secret_expires_at: secretExpiresAt,
   };
 
+  logStoreEvent("createClient.buildConfig", {
+    appId: app.id,
+    clientId,
+    hasClientSecret: Boolean(clientSecret),
+    clientSecretPreview: redactSecret(clientSecret),
+    redirectUrisCount: newClientConfig.redirect_uris
+      ? coerceStringArray(newClientConfig.redirect_uris).length
+      : 0,
+    grantTypes: coerceStringArray(newClientConfig.grant_types ?? []),
+    scope: newClientConfig.scope,
+    tokenEndpointAuthMethod: newClientConfig.token_endpoint_auth_method,
+  });
+
   // Ensure clients are tracked under config.clients for persistence.
   const nextConfig = withClientsInConfig(configClone, [
     ...staticClients,
     newClientConfig,
   ]);
+
+  logStoreEvent("createClient.persistConfig", {
+    appId: app.id,
+    previousClientCount: staticClients.length,
+    nextClientCount: appConfigClients(nextConfig).length,
+  });
 
   await updateAppConfig(app.id, nextConfig);
 
