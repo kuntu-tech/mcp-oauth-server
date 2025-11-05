@@ -844,33 +844,47 @@ const buildFirebaseUiSnippet = (mode: FirebaseUiMode = "auth"): string => {
           new firebaseui.auth.AuthUI(auth);
         let uiStarted = false;
         const providerConfig = ${JSON.stringify(CONFIG.firebaseUiProviders)};
-        const providerIds = (providerConfig || []).map((provider) => {
-          switch (provider) {
-            case "google":
-              return firebase.auth.GoogleAuthProvider.PROVIDER_ID;
-            case "apple":
-              return "apple.com";
-            case "github":
-              return firebase.auth.GithubAuthProvider
-                ? firebase.auth.GithubAuthProvider.PROVIDER_ID
-                : "github.com";
-            case "microsoft":
-              return "microsoft.com";
-            case "twitter":
-              return firebase.auth.TwitterAuthProvider
-                ? firebase.auth.TwitterAuthProvider.PROVIDER_ID
-                : "twitter.com";
-            case "facebook":
-              return firebase.auth.FacebookAuthProvider
-                ? firebase.auth.FacebookAuthProvider.PROVIDER_ID
-                : "facebook.com";
-            case "email":
-            default:
-              return firebase.auth.EmailAuthProvider.PROVIDER_ID;
-          }
-        }).filter(Boolean);
-        if (!providerIds.length) {
-          providerIds.push(firebase.auth.EmailAuthProvider.PROVIDER_ID);
+        const signInOptions = (providerConfig || [])
+          .map((provider) => {
+            switch (provider) {
+              case "google":
+                return firebase.auth.GoogleAuthProvider.PROVIDER_ID;
+              case "apple":
+                return "apple.com";
+              case "github":
+                return {
+                  provider: firebase.auth.GithubAuthProvider
+                    ? firebase.auth.GithubAuthProvider.PROVIDER_ID
+                    : "github.com",
+                  scopes: ["user:email"],
+                };
+              case "microsoft":
+                return {
+                  provider: "microsoft.com",
+                  scopes: ["email", "openid", "profile"],
+                };
+              case "twitter":
+                return {
+                  provider: firebase.auth.TwitterAuthProvider
+                    ? firebase.auth.TwitterAuthProvider.PROVIDER_ID
+                    : "twitter.com",
+                  customParameters: { include_email: "true" },
+                };
+              case "facebook":
+                return {
+                  provider: firebase.auth.FacebookAuthProvider
+                    ? firebase.auth.FacebookAuthProvider.PROVIDER_ID
+                    : "facebook.com",
+                  scopes: ["email"],
+                };
+              case "email":
+              default:
+                return firebase.auth.EmailAuthProvider.PROVIDER_ID;
+            }
+          })
+          .filter(Boolean);
+        if (!signInOptions.length) {
+          signInOptions.push(firebase.auth.EmailAuthProvider.PROVIDER_ID);
         }
 
         const renderHeaderAuthEmail = (email) => {
@@ -938,7 +952,7 @@ const buildFirebaseUiSnippet = (mode: FirebaseUiMode = "auth"): string => {
 
         const uiConfig = {
           signInFlow: "popup",
-          signInOptions: providerIds,
+          signInOptions,
           tosUrl: "${CONFIG.docsUrl}",
           privacyPolicyUrl: "${CONFIG.privacyPolicyUrl}",
           callbacks: {
