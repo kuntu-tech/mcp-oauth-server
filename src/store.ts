@@ -81,8 +81,10 @@ type AppUserPaymentRow = {
   id: string;
   app_id?: string | null;
   user_uuid?: string | null;
+  app_user_id?: string | null;
   status?: string | null;
   expires_at?: string | null;
+  end_date?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
 };
@@ -830,9 +832,10 @@ export const userHasActivePayment = async (
 ): Promise<boolean> => {
   const { data, error } = await supabase
     .from("app_user_payments")
-    .select("id,app_id,user_uuid,status,expires_at,updated_at")
+    .select("id,app_id,user_uuid,app_user_id,status,expires_at,end_date,updated_at")
     .eq("app_id", appId)
-    .eq("user_uuid", userUuid)
+    .or(`user_uuid.eq.${userUuid},app_user_id.eq.${userUuid}`)
+    .order("end_date", { ascending: false, nullsFirst: false })
     .order("updated_at", { ascending: false })
     .limit(10);
   if (error) {
@@ -850,6 +853,12 @@ export const userHasActivePayment = async (
     if (row.expires_at) {
       const expires = new Date(row.expires_at);
       if (!Number.isNaN(expires.getTime()) && expires.getTime() < now) {
+        return false;
+      }
+    }
+    if (row.end_date) {
+      const endDate = new Date(row.end_date);
+      if (!Number.isNaN(endDate.getTime()) && endDate.getTime() < now) {
         return false;
       }
     }
