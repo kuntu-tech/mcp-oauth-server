@@ -514,6 +514,17 @@ const withClientsInConfig = (
   };
 };
 
+const withoutClientInConfig = (
+  config: AppConfig,
+  clientId: string
+): AppConfig => {
+  const clone: AppConfig = JSON.parse(JSON.stringify(config ?? {}));
+  const remaining = appConfigClients(clone).filter(
+    (client) => client.client_id !== clientId
+  );
+  return withClientsInConfig(clone, remaining);
+};
+
 const appRowToApp = (row?: AppRow | null): App | undefined => {
   if (!row) {
     return undefined;
@@ -994,6 +1005,54 @@ export const createClient = async (
   }
 
   return appConfigClientToClient(newClientConfig, updatedApp);
+};
+
+export const moveClientToApp = async (
+  clientId: string,
+  targetAppId: string
+): Promise<Client> => {
+  const { app: sourceApp, clientConfig } = await locateAppByClientId(clientId);
+  if (sourceApp.id === targetAppId) {
+    return appConfigClientToClient(clientConfig, sourceApp);
+  }
+
+  logStoreEvent("moveClient.start", {
+    clientId,
+    sourceAppId: sourceApp.id,
+    targetAppId,
+  });
+
+  // Remove client from source app configuration.
+  const sourceNextConfig = withoutClientInConfig(sourceApp.config ?? {}, clientId);
+  await updateAppConfig(sourceApp.id, sourceNextConfig);
+
+  const targetApp = await findAppByUuid(targetAppId);
+  if (!targetApp) {
+    throw new Error(`Target app ${targetAppId} not found while moving client.`);
+  }
+
+  const targetClone: AppConfig = JSON.parse(
+    JSON.stringify(targetApp.config ?? {})
+  );
+  const targetClients = appConfigClients(targetClone).filter(
+    (client) => client.client_id !== clientId
+  );
+  targetClients.push(clientConfig);
+  const targetNextConfig = withClientsInConfig(targetClone, targetClients);
+  await updateAppConfig(targetApp.id, targetNextConfig);
+
+  const refreshedTarget = await findAppByUuid(targetApp.id);
+  if (!refreshedTarget) {
+    throw new Error("Target app disappeared after moving client.");
+  }
+
+  logStoreEvent("moveClient.success", {
+    clientId,
+    sourceAppId: sourceApp.id,
+    targetAppId,
+  });
+
+  return appConfigClientToClient(clientConfig, refreshedTarget);
 };
 
 export const updateClientScopes = async (

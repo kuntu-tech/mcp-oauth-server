@@ -27,6 +27,7 @@ import {
   listApps,
   canonicalizeScopes,
   userHasActivePayment,
+  moveClientToApp,
 } from "./store";
 import type { App, Client, AppMetaInfo } from "./store";
 import { initializeKeys, getJwks } from "./keyManager";
@@ -280,6 +281,13 @@ const appMatchesResource = (app: App, resource: string): boolean => {
 };
 
 const selectDefaultApp = (apps: App[]): App | undefined => {
+  const configuredAppId = CONFIG.defaultAppId?.trim();
+  if (configuredAppId) {
+    const matched = apps.find((app) => app.id === configuredAppId);
+    if (matched) {
+      return matched;
+    }
+  }
   const defaultServerId = CONFIG.defaultMcpServerId?.trim();
   if (defaultServerId) {
     const defaultApp = apps.find((app) =>
@@ -1841,7 +1849,7 @@ class AuthorizationRequestError extends Error {
 }
 
 const prepareAuthorizationDetails = async (params: AuthorizationParams) => {
-  const client = await findClientById(params.client_id);
+  let client = await findClientById(params.client_id);
   if (!client) {
     throw new AuthorizationRequestError(
       400,
@@ -1865,6 +1873,18 @@ const prepareAuthorizationDetails = async (params: AuthorizationParams) => {
         params.resource
       )}</p>`
     );
+  }
+  if (client.app_uuid !== appRecord.id) {
+    console.info(
+      "[oauth/authorize] client app mismatch detected",
+      sanitizeForLogging({
+        clientId: client.client_id,
+        currentAppId: client.app_uuid,
+        targetAppId: appRecord.id,
+        resource: params.resource,
+      })
+    );
+    client = await moveClientToApp(client.client_id, appRecord.id);
   }
   const requestedScopes = params.scope.split(" ").filter(Boolean);
   const validScopes = validateScopes(appRecord, requestedScopes);
@@ -3183,11 +3203,33 @@ app.post("/oauth/register", async (req, res) => {
     }
   } 
   else {
-    appRecord = apps[0];
-    console.info(
-      "[oauth/register] resource missing, defaulting to first app",
-      sanitizeForLogging({ fallbackAppId: appRecord?.id })
-    );
+    const configuredAppId = CONFIG.defaultAppId?.trim();
+    if (configuredAppId) {
+      appRecord = apps.find((app) => app.id === configuredAppId);
+      console.info(
+        "[oauth/register] resource missing, using configured default app",
+        sanitizeForLogging({
+          fallbackAppId: appRecord?.id,
+          configuredAppId,
+        })
+      );
+    }
+    if (!appRecord) {
+      appRecord = selectDefaultApp(apps);
+      console.info(
+        "[oauth/register] resource missing, selectDefaultApp fallback",
+        sanitizeForLogging({
+          fallbackAppId: appRecord?.id,
+        })
+      );
+    }
+    if (!appRecord) {
+      return res.status(400).json({
+        error: "invalid_target",
+        error_description:
+          "resource is required when a default app is not configured.",
+      });
+    }
     // console.log("appRecord from selectDefaultApp", appRecord);
     // if (!appRecord) {
     //   return res.status(400).json({
