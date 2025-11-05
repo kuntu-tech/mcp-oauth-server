@@ -1003,6 +1003,20 @@ type FirebaseAccountRecord = {
   displayName?: string;
 };
 
+const decodeJwtPayload = (token: string): Record<string, unknown> | undefined => {
+  const [, payload] = token.split(".");
+  if (!payload) {
+    return undefined;
+  }
+  try {
+    const decoded = Buffer.from(payload, "base64url").toString("utf8");
+    return JSON.parse(decoded) as Record<string, unknown>;
+  } catch (error) {
+    console.warn("Failed to decode Firebase ID token payload", error);
+    return undefined;
+  }
+};
+
 const verifyFirebaseIdToken = async (
   idToken: string
 ): Promise<FirebaseAccountRecord> => {
@@ -1057,6 +1071,12 @@ const verifyFirebaseIdToken = async (
       localId?: string;
       email?: string;
       displayName?: string;
+      providerUserInfo?: Array<{
+        email?: string;
+        displayName?: string;
+        providerId?: string;
+        rawId?: string;
+      }>;
     }>;
   };
 
@@ -1067,15 +1087,52 @@ const verifyFirebaseIdToken = async (
     throw new Error("Cannot parse Firebase return data.");
   }
 
+  const tokenPayload = decodeJwtPayload(idToken);
   const user = parsed.users?.[0];
-  if (!user?.email) {
+  const providerDisplayName =
+    user?.providerUserInfo?.find(
+      (info) =>
+        typeof info?.displayName === "string" && info.displayName.trim().length > 0
+    )?.displayName ?? undefined;
+  const providerEmail =
+    user?.providerUserInfo?.find(
+      (info) => typeof info?.email === "string" && info.email.trim().length > 0
+    )?.email ?? undefined;
+  const payloadEmail =
+    typeof tokenPayload?.email === "string" && tokenPayload.email.trim().length > 0
+      ? tokenPayload.email
+      : undefined;
+
+  const email = (user?.email ?? providerEmail ?? payloadEmail)?.trim();
+  if (!email) {
     throw new Error("Firebase account missing email information.");
   }
 
+  const payloadName =
+    typeof tokenPayload?.name === "string" && tokenPayload.name.trim().length > 0
+      ? tokenPayload.name
+      : undefined;
+  const displayName =
+    (typeof user?.displayName === "string" && user.displayName.trim().length > 0
+      ? user.displayName
+      : undefined) ??
+    providerDisplayName ??
+    payloadName;
+  const uid =
+    (typeof user?.localId === "string" && user.localId.trim().length > 0
+      ? user.localId
+      : undefined) ??
+    (typeof tokenPayload?.user_id === "string" && tokenPayload.user_id.trim().length > 0
+      ? tokenPayload.user_id
+      : undefined) ??
+    (typeof tokenPayload?.sub === "string" && tokenPayload.sub.trim().length > 0
+      ? tokenPayload.sub
+      : "");
+
   return {
-    uid: user.localId ?? "",
-    email: user.email,
-    displayName: user.displayName ?? undefined,
+    uid,
+    email,
+    displayName,
   };
 };
 
