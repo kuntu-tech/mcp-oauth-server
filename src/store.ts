@@ -832,9 +832,8 @@ export const userHasActivePayment = async (
 ): Promise<boolean> => {
   const { data, error } = await supabase
     .from("app_user_payments")
-    .select("id,app_id,user_uuid,app_user_id,status,expires_at,end_date,updated_at")
+    .select("*")
     .eq("app_id", appId)
-    .or(`user_uuid.eq.${userUuid},app_user_id.eq.${userUuid}`)
     .order("end_date", { ascending: false, nullsFirst: false })
     .order("updated_at", { ascending: false })
     .limit(10);
@@ -842,12 +841,22 @@ export const userHasActivePayment = async (
     throw new Error(`Failed to check payment status: ${error.message}`);
   }
   const now = Date.now();
-  return (data as AppUserPaymentRow[] | null | undefined)?.some((row) => {
-    if (!row) {
-      return false;
-    }
-    const status = (row.status ?? "").trim().toLowerCase();
-    if (status && !ACTIVE_PAYMENT_STATUSES.has(status)) {
+  return (data as AppUserPaymentRow[] | null | undefined)
+    ?.filter((row) => {
+      if (!row) {
+        return false;
+      }
+      return (
+        (row.user_uuid && row.user_uuid === userUuid) ||
+        (row.app_user_id && row.app_user_id === userUuid)
+      );
+    })
+    ?.some((row) => {
+      if (!row) {
+        return false;
+      }
+      const status = (row.status ?? "").trim().toLowerCase();
+      if (status && !ACTIVE_PAYMENT_STATUSES.has(status)) {
       return false;
     }
     if (row.expires_at) {
