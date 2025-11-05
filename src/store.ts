@@ -3,7 +3,7 @@ import { randomUUID } from "crypto";
 import supabase from "./db";
 import { CONFIG } from "./config";
 
-const DEFAULT_SCOPE_FALLBACK = ["openid", "profile", "email"];
+const DEFAULT_SCOPE_FALLBACK = ["openid", "profile", "email", "apps.read"];
 
 type Nullable<T> = T | null | undefined;
 
