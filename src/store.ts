@@ -1023,8 +1023,21 @@ export const moveClientToApp = async (
   });
 
   // Remove client from source app configuration.
-  const sourceNextConfig = withoutClientInConfig(sourceApp.config ?? {}, clientId);
+  const sourceClientsRemaining = appConfigClients(
+    sourceApp.config ?? {}
+  ).filter((client) => client.client_id !== clientId);
+  const shouldClearSourceConfig =
+    sourceApp.id === CONFIG.defaultAppId && sourceClientsRemaining.length === 0;
+  const sourceNextConfig = shouldClearSourceConfig
+    ? {}
+    : withClientsInConfig(sourceApp.config ?? {}, sourceClientsRemaining);
   await updateAppConfig(sourceApp.id, sourceNextConfig);
+  if (shouldClearSourceConfig) {
+    logStoreEvent("moveClient.clearedDefaultConfig", {
+      clientId,
+      sourceAppId: sourceApp.id,
+    });
+  }
 
   const targetApp = await findAppByUuid(targetAppId);
   if (!targetApp) {
