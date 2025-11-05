@@ -527,6 +527,28 @@ const withoutClientInConfig = (
   return withClientsInConfig(clone, remaining);
 };
 
+const mergeScopes = (...values: (string | string[] | undefined)[]): string => {
+  const scopes = new Set<string>();
+  values.forEach((value) => {
+    if (!value) {
+      return;
+    }
+    const asArray = Array.isArray(value)
+      ? value
+      : typeof value === "string"
+      ? value.split(/\s+/)
+      : [];
+    asArray
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .forEach((scope) => scopes.add(scope));
+  });
+  if (scopes.size === 0) {
+    return canonicalScopeString(DEFAULT_SCOPE_FALLBACK);
+  }
+  return canonicalScopeString(Array.from(scopes));
+};
+
 const appRowToApp = (row?: AppRow | null): App | undefined => {
   if (!row) {
     return undefined;
@@ -1068,7 +1090,14 @@ export const moveClientToApp = async (
   const targetClients = appConfigClients(targetClone).filter(
     (client) => client.client_id !== clientId
   );
-  targetClients.push(clientConfig);
+  const mergedScopes = mergeScopes(
+    clientConfig.scope ?? undefined,
+    targetApp.default_scopes
+  );
+  targetClients.push({
+    ...clientConfig,
+    scope: mergedScopes,
+  });
   const targetNextConfig = withClientsInConfig(targetClone, targetClients);
   await updateAppConfig(targetApp.id, targetNextConfig);
 
