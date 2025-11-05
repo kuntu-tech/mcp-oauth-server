@@ -1874,18 +1874,6 @@ const prepareAuthorizationDetails = async (params: AuthorizationParams) => {
       )}</p>`
     );
   }
-  if (client.app_uuid !== appRecord.id) {
-    console.info(
-      "[oauth/authorize] client app mismatch detected",
-      sanitizeForLogging({
-        clientId: client.client_id,
-        currentAppId: client.app_uuid,
-        targetAppId: appRecord.id,
-        resource: params.resource,
-      })
-    );
-    client = await moveClientToApp(client.client_id, appRecord.id);
-  }
   const requestedScopes = params.scope.split(" ").filter(Boolean);
   const validScopes = validateScopes(appRecord, requestedScopes);
   if (validScopes.length === 0) {
@@ -1896,6 +1884,23 @@ const prepareAuthorizationDetails = async (params: AuthorizationParams) => {
     );
   }
   const canonicalScopes = canonicalizeScopes(validScopes);
+  if (client.app_uuid !== appRecord.id) {
+    console.info(
+      "[oauth/authorize] client app mismatch detected",
+      sanitizeForLogging({
+        clientId: client.client_id,
+        currentAppId: client.app_uuid,
+        targetAppId: appRecord.id,
+        resource: params.resource,
+        requestedScopes: canonicalScopes,
+      })
+    );
+    client = await moveClientToApp(
+      client.client_id,
+      appRecord.id,
+      canonicalScopes
+    );
+  }
   const authRequest: PendingAuthRequest = {
     response_type: params.response_type,
     client_id: params.client_id,

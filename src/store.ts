@@ -527,7 +527,9 @@ const withoutClientInConfig = (
   return withClientsInConfig(clone, remaining);
 };
 
-const mergeScopes = (...values: (string | string[] | undefined)[]): string => {
+const mergeScopes = (
+  ...values: (string | string[] | undefined)[]
+): string => {
   const scopes = new Set<string>();
   values.forEach((value) => {
     if (!value) {
@@ -1049,7 +1051,8 @@ export const createClient = async (
 
 export const moveClientToApp = async (
   clientId: string,
-  targetAppId: string
+  targetAppId: string,
+  requestedScopes?: string[]
 ): Promise<Client> => {
   const { app: sourceApp, clientConfig } = await locateAppByClientId(clientId);
   if (sourceApp.id === targetAppId) {
@@ -1090,9 +1093,14 @@ export const moveClientToApp = async (
   const targetClients = appConfigClients(targetClone).filter(
     (client) => client.client_id !== clientId
   );
+  const configDefaultScopes = normalizeScopeInput(
+    targetApp.config?.default_scopes
+  );
   const mergedScopes = mergeScopes(
+    requestedScopes,
     clientConfig.scope ?? undefined,
-    targetApp.default_scopes
+    targetApp.default_scopes,
+    configDefaultScopes.length > 0 ? configDefaultScopes : undefined
   );
   targetClients.push({
     ...clientConfig,
