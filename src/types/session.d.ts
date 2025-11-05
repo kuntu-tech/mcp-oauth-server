@@ -15,9 +15,17 @@ declare module "express-session" {
     };
     pendingPayment?: {
       appId: string;
-      paymentLink: string;
+      paymentLink?: string;
       appName?: string;
       startedAt: string;
+      sessionId?: string;
+      userUuid?: string;
+      paymentModel?: {
+        model?: string;
+        price?: number;
+        interval?: string;
+        [key: string]: unknown;
+      };
     };
   }
 }

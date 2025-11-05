@@ -29,7 +29,7 @@ import {
   userHasActivePayment,
   moveClientToApp,
 } from "./store";
-import type { App, Client, AppMetaInfo } from "./store";
+import type { App, Client, AppMetaInfo, AppPaymentModel } from "./store";
 import { initializeKeys, getJwks } from "./keyManager";
 import {
   issueAccessToken,
@@ -504,6 +504,88 @@ type PaymentGateDecision =
   | { allowed: false; redirectPath: string }
   | { allowed: false; error: string };
 
+type PaymentSessionApiResponse = {
+  success?: boolean;
+  data?: {
+    sessionId?: string;
+    url?: string;
+    type?: string;
+    paymentModel?: string;
+    priceAmount?: number;
+    [key: string]: unknown;
+  };
+  message?: string;
+};
+
+const formatPriceLabel = (model?: AppPaymentModel): string | undefined => {
+  if (!model) {
+    return undefined;
+  }
+  if (model.model === "subscription") {
+    const price =
+      typeof model.price === "number"
+        ? `$${model.price.toFixed(2)}`
+        : model.price !== undefined
+        ? String(model.price)
+        : undefined;
+    const interval =
+      typeof model.interval === "string" && model.interval.trim().length > 0
+        ? model.interval.trim()
+        : undefined;
+    if (price && interval) {
+      return `${price} / ${interval}`;
+    }
+    return price ?? undefined;
+  }
+  return undefined;
+};
+
+const createPaymentSession = async (
+  userUuid: string,
+  app: App
+): Promise<{ url: string; sessionId?: string; raw?: Record<string, unknown> }> => {
+  if (!CONFIG.paymentSessionApiUrl) {
+    throw new Error("Payment session API URL is not configured.");
+  }
+  const response = await fetch(CONFIG.paymentSessionApiUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      app_userid: userUuid,
+      app_id: app.id,
+    }),
+  });
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(
+      `Payment session request failed (${response.status}): ${text || "no response body"}`
+    );
+  }
+  let parsed: PaymentSessionApiResponse;
+  try {
+    parsed = (await response.json()) as PaymentSessionApiResponse;
+  } catch (error) {
+    throw new Error("Unable to parse payment session response.");
+  }
+  if (!parsed?.success || !parsed.data?.url) {
+    throw new Error(
+      parsed?.message ?? "Payment session API returned an unexpected payload."
+    );
+  }
+  return {
+    url: String(parsed.data.url),
+    sessionId: parsed.data.sessionId
+      ? String(parsed.data.sessionId)
+      : undefined,
+    raw:
+      typeof parsed.data === "object" && parsed.data !== null
+        ? (parsed.data as Record<string, unknown>)
+        : undefined,
+  };
+};
+
 const ensurePaymentAccess = async (
   req: express.Request,
   userUuid: string,
@@ -525,30 +607,84 @@ const ensurePaymentAccess = async (
     return { allowed: true };
   }
 
-  const paymentLink = appRecord.payment_link?.trim();
-  if (!paymentLink) {
+  const clearPending = async () => {
     if (req.session.pendingPayment) {
       req.session.pendingPayment = undefined;
       try {
         await persistSession(req);
       } catch (error) {
-        console.warn("Failed to persist session while clearing pending payment cache", error);
+        console.warn(
+          "Failed to persist session while clearing pending payment cache",
+          error
+        );
       }
     }
+  };
+
+  const paymentModel = appRecord.payment_model;
+  const existingPending = req.session.pendingPayment;
+  const hasPendingForUser =
+    existingPending &&
+    existingPending.appId === appRecord.id &&
+    existingPending.userUuid === userUuid;
+
+  if (!paymentModel || paymentModel.model === "free") {
+    await clearPending();
+    return { allowed: true };
+  }
+
+  if (paymentModel.model === "subscription") {
+    try {
+      const hasPayment = await userHasActivePayment(appRecord.id, userUuid);
+      if (hasPayment) {
+        await clearPending();
+        return { allowed: true };
+      }
+    } catch (error) {
+      console.error("Failed to verify payment status", error);
+      return {
+        allowed: false,
+        error: "Unable to verify payment status. Please try again later.",
+      };
+    }
+
+    if (hasPendingForUser && existingPending?.paymentLink) {
+      return { allowed: false, redirectPath: "/auth/payment-required" };
+    }
+
+    try {
+      const sessionInfo = await createPaymentSession(userUuid, appRecord);
+      req.session.pendingPayment = {
+        appId: appRecord.id,
+        paymentLink: sessionInfo.url,
+        appName: appRecord.name,
+        startedAt: new Date().toISOString(),
+        sessionId: sessionInfo.sessionId,
+        userUuid,
+        paymentModel,
+      };
+      await persistSession(req);
+    } catch (error) {
+      console.error("Failed to create payment session", error);
+      return {
+        allowed: false,
+        error: "Unable to initiate payment session. Please try again later.",
+      };
+    }
+
+    return { allowed: false, redirectPath: "/auth/payment-required" };
+  }
+
+  const paymentLink = appRecord.payment_link?.trim();
+  if (!paymentLink) {
+    await clearPending();
     return { allowed: true };
   }
 
   try {
     const hasPayment = await userHasActivePayment(appRecord.id, userUuid);
     if (hasPayment) {
-      if (req.session.pendingPayment) {
-        req.session.pendingPayment = undefined;
-        try {
-          await persistSession(req);
-        } catch (error) {
-          console.warn("Failed to persist session after confirming payment access", error);
-        }
-      }
+      await clearPending();
       return { allowed: true };
     }
   } catch (error) {
@@ -564,6 +700,8 @@ const ensurePaymentAccess = async (
     paymentLink,
     appName: appRecord.name,
     startedAt: new Date().toISOString(),
+    userUuid,
+    paymentModel,
   };
   try {
     await persistSession(req);
@@ -1990,10 +2128,15 @@ const renderPaymentRequiredPage = (options: {
   appName: string;
   paymentLink: string;
   startedAt?: string;
+  priceLabel?: string;
 }): string => {
+  const priceBlock = options.priceLabel
+    ? `<p class="text-sm font-semibold">Price: ${escapeHtml(options.priceLabel)}</p>`
+    : "";
   const intro = `
     <h1>Payment required</h1>
     <p>You need an active purchase to use <strong>${escapeHtml(options.appName)}</strong>.</p>
+    ${priceBlock}
     <p>Please complete the payment in the new tab. This page will automatically continue once your purchase is confirmed.</p>
     <p><a href="${escapeHtml(options.paymentLink)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:0.5rem;padding:0.65rem 1.25rem;background:#2563eb;color:#fff;border-radius:999px;text-decoration:none;font-weight:600;">Open payment page</a></p>
   `;
@@ -2555,17 +2698,48 @@ app.get("/auth/payment-required", async (req, res) => {
 
   let paymentLink = pending.paymentLink;
   let appName = pending.appName;
+  let paymentModel = pending.paymentModel;
+  let appRecord: App | undefined;
+  try {
+    appRecord = await findAppByUuid(pending.appId);
+    if (!appName && appRecord?.name) {
+      appName = appRecord.name;
+    }
+    if (!paymentModel && appRecord?.payment_model) {
+      paymentModel = appRecord.payment_model;
+    }
+  } catch (error) {
+    console.warn("Failed to reload app information for payment-required", error);
+  }
+
   if (!paymentLink) {
     try {
-      const appRecord = await findAppByUuid(pending.appId);
-      if (appRecord?.payment_link) {
+      if (paymentModel?.model === "subscription" && appRecord) {
+        const sessionInfo = await createPaymentSession(userUuid, appRecord);
+        paymentLink = sessionInfo.url;
+        req.session.pendingPayment = {
+          ...pending,
+          paymentLink,
+          sessionId: sessionInfo.sessionId,
+          startedAt: new Date().toISOString(),
+          paymentModel,
+          userUuid,
+          appName,
+        };
+        await persistSession(req);
+      } else if (appRecord?.payment_link) {
         paymentLink = appRecord.payment_link;
       }
-      if (!appName && appRecord?.name) {
-        appName = appRecord.name;
-      }
     } catch (error) {
-      console.warn("Failed to reload app information for payment-required", error);
+      console.error("Failed to refresh payment session", error);
+      return res
+        .status(500)
+        .send(
+          renderPage(
+            "Payment unavailable",
+            `<p class="danger">Unable to start the payment session. Please try again later.</p>`
+          )
+        );
     }
   }
 
@@ -2591,6 +2765,7 @@ app.get("/auth/payment-required", async (req, res) => {
       appName: appName ?? "this app",
       paymentLink,
       startedAt: pending.startedAt,
+      priceLabel: formatPriceLabel(paymentModel ?? appRecord?.payment_model),
     })
   );
 });
@@ -2598,7 +2773,11 @@ app.get("/auth/payment-required", async (req, res) => {
 app.get("/auth/payment-status", async (req, res) => {
   const pending = req.session.pendingPayment;
   const userUuid = req.session.userUuid;
-  if (!pending || !userUuid) {
+  if (
+    !pending ||
+    !userUuid ||
+    (pending.userUuid && pending.userUuid !== userUuid)
+  ) {
     return res.json({ ok: true, paid: false, pending: false });
   }
   try {

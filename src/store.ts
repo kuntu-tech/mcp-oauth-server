@@ -34,6 +34,7 @@ type AppRow = {
   config?: string | null;
   status?: string | null;
   payment_link?: string | null;
+  payment_model?: string | null;
   mcp_server_ids?: string[] | string | null;
   app_meta_info?: unknown;
   created_at?: string | null;
@@ -147,12 +148,20 @@ export interface User {
   provider_user_id?: string | null;
 }
 
+export type AppPaymentModel = {
+  model?: string;
+  price?: number;
+  interval?: string;
+  [key: string]: unknown;
+};
+
 export interface App {
   id: string;
   uuid: string;
   name: string;
   resource_uri: string;
   payment_link?: string | null;
+  payment_model?: AppPaymentModel;
   mcp_server_ids: string[];
   default_scopes: string;
   status?: string | null;
@@ -551,6 +560,23 @@ const mergeScopes = (
   return canonicalScopeString(Array.from(scopes));
 };
 
+const parsePaymentModel = (
+  value?: string | null
+): AppPaymentModel | undefined => {
+  if (!value) {
+    return undefined;
+  }
+  try {
+    const parsed = JSON.parse(value);
+    if (typeof parsed === "object" && parsed !== null) {
+      return parsed as AppPaymentModel;
+    }
+  } catch (error) {
+    console.warn("Failed to parse payment_model JSON", error);
+  }
+  return undefined;
+};
+
 const appRowToApp = (row?: AppRow | null): App | undefined => {
   if (!row) {
     return undefined;
@@ -560,12 +586,14 @@ const appRowToApp = (row?: AppRow | null): App | undefined => {
   const defaultScopes = defaultScopesFromConfig(config);
   const mcpServerIds = normalizeStringArray(row.mcp_server_ids);
   const metaInfo = parseAppMetaInfo(row.app_meta_info);
+  const paymentModel = parsePaymentModel(row.payment_model);
   return {
     id: row.id,
     uuid: row.id,
     name: row.name,
     resource_uri: resourceUri,
     payment_link: row.payment_link ?? undefined,
+    payment_model: paymentModel,
     mcp_server_ids: mcpServerIds,
     default_scopes: canonicalizeScopes(defaultScopes).join(" "),
     status: row.status ?? undefined,
@@ -666,7 +694,7 @@ const fetchAllApps = async (): Promise<App[]> => {
   const { data, error } = await supabase
     .from("apps")
     .select(
-      "id,name,config,status,payment_link,mcp_server_ids,app_meta_info,created_at,updated_at"
+      "id,name,config,status,payment_link,payment_model,mcp_server_ids,app_meta_info,created_at,updated_at"
     );
   if (error) {
     throw new Error(`Failed to fetch apps: ${error.message}`);
@@ -826,7 +854,7 @@ export const findAppByUuid = async (uuid: string): Promise<App | undefined> => {
   const { data, error } = await supabase
     .from("apps")
     .select(
-      "id,name,config,status,payment_link,mcp_server_ids,app_meta_info,created_at,updated_at"
+      "id,name,config,status,payment_link,payment_model,mcp_server_ids,app_meta_info,created_at,updated_at"
     )
     .eq("id", uuid)
     .maybeSingle();

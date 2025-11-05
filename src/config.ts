@@ -69,6 +69,7 @@ export const CONFIG = {
     "https://developers.openai.com/apps-sdk/data-usage#privacy",
   defaultMcpServerId,
   defaultAppId,
+  paymentSessionApiUrl: process.env.PAYMENT_SESSION_URL,
   firebaseClientConfig: hasFirebaseClientConfig
     ? firebaseClientConfig
     : undefined,
