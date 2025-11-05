@@ -19,7 +19,6 @@ Tokens embed `sub` and `email`, allowing you to keep a unified identity across m
 
 - Node.js + TypeScript
 - Express + express-session
-- SQLite (via `better-sqlite3`)
 - JOSE for JWT/JWKS
 - Zod for request validation
 
@@ -32,8 +31,6 @@ Tokens embed `sub` and `email`, allowing you to keep a unified identity across m
    ```bash
    npm install
    ```
-
-   > Building `better-sqlite3` can take a few minutes the first time because it compiles native bindings. Feel free to swap it for a different persistence layer if desired.
 
 2. **Copy configuration**
 
@@ -98,7 +95,7 @@ Tokens embed `sub` and `email`, allowing you to keep a unified identity across m
 
 ## Customizing
 
-- **Database**: swap `better-sqlite3` for Postgres or another provider by changing `src/db.ts` + `src/store.ts`.
+- **Database**: swap supebase
 - **Tokens**: adjust scopes, TTLs, or claims in `src/config.ts` and `src/tokens.ts`.
 - **Consent UX**: update the HTML templates in `src/index.ts` to match your branding and add purchase/upgrade prompts.
 - **Admin tooling**: extend client registration with an authenticated dashboard or CLI to issue long-lived confidential clients (e.g., for service-to-service connectors).

@@ -13,5 +13,11 @@ declare module "express-session" {
       resource: string;
       response_type: "code";
     };
+    pendingPayment?: {
+      appId: string;
+      paymentLink: string;
+      appName?: string;
+      startedAt: string;
+    };
   }
 }

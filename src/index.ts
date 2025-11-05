@@ -5,6 +5,7 @@ import session from "express-session";
 import morgan from "morgan";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
+import { decodeProtectedHeader } from "jose";
 import { CONFIG } from "./config";
 import {
   createClient,
@@ -25,6 +26,7 @@ import {
   getAllSupportedScopes,
   listApps,
   canonicalizeScopes,
+  userHasActivePayment,
 } from "./store";
 import type { App, Client, AppMetaInfo } from "./store";
 import { initializeKeys, getJwks } from "./keyManager";
@@ -459,6 +461,109 @@ const persistSession = async (req: express.Request): Promise<void> => {
       });
     });
   }
+};
+
+const resolveSessionAppId = async (
+  req: express.Request
+): Promise<string | undefined> => {
+  const authRequest = req.session?.authRequest as
+    | PendingAuthRequest
+    | undefined;
+  if (!authRequest) {
+    return undefined;
+  }
+  try {
+    const appRecord = await findAppByResourceLocal(authRequest.resource);
+    if (appRecord?.uuid) {
+      return appRecord.uuid;
+    }
+  } catch (error) {
+    console.warn("Failed to resolve app from resource", error);
+  }
+  try {
+    const clientRecord = await findClientById(authRequest.client_id);
+    if (clientRecord?.app_uuid) {
+      return clientRecord.app_uuid;
+    }
+  } catch (error) {
+    console.warn("Failed to resolve app from client", error);
+  }
+  return undefined;
+};
+
+type PaymentGateDecision =
+  | { allowed: true }
+  | { allowed: false; redirectPath: string }
+  | { allowed: false; error: string };
+
+const ensurePaymentAccess = async (
+  req: express.Request,
+  userUuid: string,
+  authRequest: PendingAuthRequest
+): Promise<PaymentGateDecision> => {
+  let appRecord = await findAppByResourceLocal(authRequest.resource);
+  if (!appRecord) {
+    try {
+      const client = await findClientById(authRequest.client_id);
+      if (client) {
+        appRecord = await findAppByUuid(client.app_uuid);
+      }
+    } catch (error) {
+      console.warn("Failed to resolve app from client during payment check", error);
+    }
+  }
+
+  if (!appRecord) {
+    return { allowed: true };
+  }
+
+  const paymentLink = appRecord.payment_link?.trim();
+  if (!paymentLink) {
+    if (req.session.pendingPayment) {
+      req.session.pendingPayment = undefined;
+      try {
+        await persistSession(req);
+      } catch (error) {
+        console.warn("Failed to persist session while clearing pending payment cache", error);
+      }
+    }
+    return { allowed: true };
+  }
+
+  try {
+    const hasPayment = await userHasActivePayment(appRecord.id, userUuid);
+    if (hasPayment) {
+      if (req.session.pendingPayment) {
+        req.session.pendingPayment = undefined;
+        try {
+          await persistSession(req);
+        } catch (error) {
+          console.warn("Failed to persist session after confirming payment access", error);
+        }
+      }
+      return { allowed: true };
+    }
+  } catch (error) {
+    console.error("Failed to verify payment status", error);
+    return {
+      allowed: false,
+      error: "Unable to verify payment status. Please try again later.",
+    };
+  }
+
+  req.session.pendingPayment = {
+    appId: appRecord.id,
+    paymentLink,
+    appName: appRecord.name,
+    startedAt: new Date().toISOString(),
+  };
+  try {
+    await persistSession(req);
+  } catch (error) {
+    console.warn("Failed to persist session after setting pending payment", error);
+  }
+
+  return { allowed: false, redirectPath: "/auth/payment-required" };
 };
 
 const FIREBASE_VERSION = "12.4.0";
@@ -1856,12 +1961,89 @@ const renderAuthorizePage = (
   return renderPage("Authorize access", body);
 };
 
+const renderPaymentRequiredPage = (options: {
+  appName: string;
+  paymentLink: string;
+  startedAt?: string;
+}): string => {
+  const intro = `
+    <h1>Payment required</h1>
+    <p>You need an active purchase to use <strong>${escapeHtml(options.appName)}</strong>.</p>
+    <p>Please complete the payment in the new tab. This page will automatically continue once your purchase is confirmed.</p>
+    <p><a href="${escapeHtml(options.paymentLink)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:0.5rem;padding:0.65rem 1.25rem;background:#2563eb;color:#fff;border-radius:999px;text-decoration:none;font-weight:600;">Open payment page</a></p>
+  `;
+  const started =
+    options.startedAt && options.startedAt.length > 0
+      ? `<p class="text-sm">Waiting since ${escapeHtml(options.startedAt)}.</p>`
+      : "";
+  const script = `
+    <script>
+      (function () {
+        const STATUS_ENDPOINT = "/auth/payment-status";
+        const RETRY_DELAY = 5000;
+        let stopped = false;
+        async function poll() {
+          if (stopped) return;
+          try {
+            const response = await fetch(STATUS_ENDPOINT, {
+              credentials: "same-origin",
+              headers: {
+                "Cache-Control": "no-cache"
+              }
+            });
+            if (!response.ok) {
+              throw new Error("Failed to check payment status.");
+            }
+            const payload = await response.json();
+            if (payload?.paid) {
+              stopped = true;
+              window.location.assign("/auth/payment-resume");
+              return;
+            }
+          } catch (error) {
+            console.warn("Payment status check failed", error);
+          }
+          setTimeout(poll, RETRY_DELAY);
+        }
+        poll();
+      })();
+    </script>
+  `;
+  const body = `
+    ${intro}
+    ${started}
+    <p class="text-sm">You can refresh this page after completing the payment if it doesn't continue automatically.</p>
+  `;
+  return renderPage("Payment required", body, { scripts: script });
+};
+
 const issueCodeAndRedirect = async (
   req: express.Request,
   res: express.Response,
   userUuid: string,
   authRequest: PendingAuthRequest
 ): Promise<void> => {
+  const paymentDecision = await ensurePaymentAccess(
+    req,
+    userUuid,
+    authRequest
+  );
+  if (!paymentDecision.allowed) {
+    if ("error" in paymentDecision) {
+      res
+        .status(500)
+        .send(
+          renderPage(
+            "Payment verification failed",
+            `<p class="danger">${escapeHtml(paymentDecision.error)}</p>`
+          )
+        );
+    } else {
+      res.redirect(paymentDecision.redirectPath);
+    }
+    return;
+  }
+
   try {
     const redirectUrl = await completeAuthorizationRequest(
       req,
@@ -2104,7 +2286,21 @@ app.post("/auth/login", async (req, res) => {
       .send(renderPage("Login failed", `<p class="danger">Invalid credentials.</p>`));
   }
   const { email, password } = parsed.data;
-  const user = await findUserByEmail(email.toLowerCase());
+  const sessionAppId = await resolveSessionAppId(req);
+  if (!sessionAppId) {
+    return res
+      .status(400)
+      .send(
+        renderPage(
+          "Login failed",
+          `<p class="danger">Unable to determine the application context for this login. Please start the sign-in flow from the app's authorization link.</p>`
+        )
+      );
+  }
+  const user = await findUserByEmail(email.toLowerCase(), {
+    appId: sessionAppId,
+    fallbackToAny: false,
+  });
   if (!user?.password_hash || !verifyPassword(password, user.password_hash)) {
     return res
       .status(401)
@@ -2144,18 +2340,35 @@ app.post("/auth/register", async (req, res) => {
       );
   }
   const email = parsed.data.email.toLowerCase();
-  if (await findUserByEmail(email)) {
+  const sessionAppId = await resolveSessionAppId(req);
+  if (!sessionAppId) {
+    return res
+      .status(400)
+      .send(
+        renderPage(
+          "Registration failed",
+          `<p class="danger">Unable to determine the application context for this registration. Please start the sign-up flow from the app's authorization link.</p>`
+        )
+      );
+  }
+  if (
+    await findUserByEmail(email, {
+      appId: sessionAppId,
+      fallbackToAny: false,
+    })
+  ) {
     return res
       .status(409)
       .send(
         renderPage(
           "Registration failed",
-          `<p class="danger">This email address is already registered.</p>`
+          `<p class="danger">This email address is already registered for this app.</p>`
         )
       );
   }
   const passwordHash = hashPassword(parsed.data.password);
   const user = await createUser(email, passwordHash, parsed.data.displayName, {
+    appId: sessionAppId,
     authProvider: "local",
   });
   req.session.userUuid = user.uuid;
@@ -2181,16 +2394,6 @@ app.post("/auth/firebase/session", async (req, res) => {
     const { idToken, resume } = parsed.data;
     const account = await verifyFirebaseIdToken(idToken);
     const email = account.email.toLowerCase();
-    let user = await findUserByEmail(email);
-    if (!user) {
-      const randomPassword = createRandomPassword();
-      const passwordHash = hashPassword(randomPassword);
-      user = await createUser(email, passwordHash, account.displayName, {
-        authProvider: "firebase",
-        firebaseUid: account.uid,
-      });
-    }
-    req.session.userUuid = user.uuid;
 
     if (!req.session.authRequest && resume) {
       try {
@@ -2201,9 +2404,50 @@ app.post("/auth/firebase/session", async (req, res) => {
       }
     }
 
+    const sessionAppId = await resolveSessionAppId(req);
+    if (!sessionAppId) {
+      return res.status(400).json({
+        ok: false,
+        error:
+          "Unable to determine the application context for this login. Please relaunch the authorization flow.",
+      });
+    }
+
+    let user = await findUserByEmail(email, {
+      appId: sessionAppId,
+      fallbackToAny: false,
+    });
+    if (!user) {
+      const randomPassword = createRandomPassword();
+      const passwordHash = hashPassword(randomPassword);
+      user = await createUser(email, passwordHash, account.displayName, {
+        appId: sessionAppId,
+        authProvider: "firebase",
+        firebaseUid: account.uid,
+      });
+    }
+    req.session.userUuid = user.uuid;
+
     const activeAuthRequest = req.session.authRequest;
 
     if (activeAuthRequest) {
+      const paymentDecision = await ensurePaymentAccess(
+        req,
+        user.uuid,
+        activeAuthRequest
+      );
+      if (!paymentDecision.allowed) {
+        if ("error" in paymentDecision) {
+          return res.status(500).json({
+            ok: false,
+            error: paymentDecision.error,
+          });
+        }
+        return res.json({
+          ok: true,
+          redirect: paymentDecision.redirectPath,
+        });
+      }
       try {
         const redirectUrl = await completeAuthorizationRequest(
           req,
@@ -2245,6 +2489,122 @@ app.post("/auth/firebase/session", async (req, res) => {
   }
 });
 
+app.get("/auth/payment-required", async (req, res) => {
+  const pending = req.session.pendingPayment;
+  const userUuid = req.session.userUuid;
+  const authRequest = req.session.authRequest;
+  if (!pending || !userUuid || !authRequest) {
+    if (pending) {
+      req.session.pendingPayment = undefined;
+      try {
+        await persistSession(req);
+      } catch (error) {
+        console.warn("Failed to persist session while clearing pending payment", error);
+      }
+    }
+    return res.redirect("/");
+  }
+
+  try {
+    const hasPayment = await userHasActivePayment(pending.appId, userUuid);
+    if (hasPayment) {
+      req.session.pendingPayment = undefined;
+      try {
+        await persistSession(req);
+      } catch (error) {
+        console.warn("Failed to persist session after confirming payment", error);
+      }
+      return res.redirect("/auth/payment-resume");
+    }
+  } catch (error) {
+    console.error("Failed to check payment status during payment-required", error);
+    return res
+      .status(500)
+      .send(
+        renderPage(
+          "Payment verification failed",
+          `<p class="danger">We were unable to verify your payment status. Please try again later.</p>`
+        )
+      );
+  }
+
+  let paymentLink = pending.paymentLink;
+  let appName = pending.appName;
+  if (!paymentLink) {
+    try {
+      const appRecord = await findAppByUuid(pending.appId);
+      if (appRecord?.payment_link) {
+        paymentLink = appRecord.payment_link;
+      }
+      if (!appName && appRecord?.name) {
+        appName = appRecord.name;
+      }
+    } catch (error) {
+      console.warn("Failed to reload app information for payment-required", error);
+    }
+  }
+
+  if (!paymentLink) {
+    req.session.pendingPayment = undefined;
+    try {
+      await persistSession(req);
+    } catch (error) {
+      console.warn("Failed to persist session while clearing invalid payment link", error);
+    }
+    return res
+      .status(500)
+      .send(
+        renderPage(
+          "Payment unavailable",
+          `<p class="danger">This application does not have a payment link configured. Please contact the administrator.</p>`
+        )
+      );
+  }
+
+  return res.send(
+    renderPaymentRequiredPage({
+      appName: appName ?? "this app",
+      paymentLink,
+      startedAt: pending.startedAt,
+    })
+  );
+});
+
+app.get("/auth/payment-status", async (req, res) => {
+  const pending = req.session.pendingPayment;
+  const userUuid = req.session.userUuid;
+  if (!pending || !userUuid) {
+    return res.json({ ok: true, paid: false, pending: false });
+  }
+  try {
+    const hasPayment = await userHasActivePayment(pending.appId, userUuid);
+    if (hasPayment) {
+      req.session.pendingPayment = undefined;
+      try {
+        await persistSession(req);
+      } catch (error) {
+        console.warn("Failed to persist session after payment polling succeeded", error);
+      }
+      return res.json({ ok: true, paid: true });
+    }
+    return res.json({ ok: true, paid: false, pending: true });
+  } catch (error) {
+    console.error("Failed to check payment status via polling endpoint", error);
+    return res
+      .status(500)
+      .json({ ok: false, error: "Unable to verify payment status." });
+  }
+});
+
+app.get("/auth/payment-resume", async (req, res) => {
+  const authRequest = req.session.authRequest;
+  const userUuid = req.session.userUuid;
+  if (!authRequest || !userUuid) {
+    return res.redirect("/");
+  }
+  await issueCodeAndRedirect(req, res, userUuid, authRequest);
+});
+
 app.get("/auth/logout", (req, res) => {
   req.session.destroy(() => {
     res.redirect("/");
@@ -2264,12 +2624,12 @@ app.get("/oauth/authorize", async (req, res) => {
       );
   }
   try {
-    const { authRequest } = await prepareAuthorizationDetails(parsed.data);
+    const { authRequest, app } = await prepareAuthorizationDetails(parsed.data);
     req.session.authRequest = authRequest;
 
     if (req.session.userUuid) {
       const user = await findUserByUuid(req.session.userUuid);
-      if (user) {
+      if (user?.app_id === app.id) {
         await issueCodeAndRedirect(req, res, user.uuid, authRequest);
         return;
       }
@@ -2391,7 +2751,10 @@ app.post("/oauth/authorize", async (req, res) => {
         );
     }
 
-    const user = await findUserByEmail(email.toLowerCase());
+    const user = await findUserByEmail(email.toLowerCase(), {
+      appId: app.id,
+      fallbackToAny: false,
+    });
     if (!user?.password_hash || !verifyPassword(password, user.password_hash)) {
       return res
         .status(401)
@@ -2454,6 +2817,14 @@ app.post("/oauth/preview-token", async (req, res) => {
     });
   }
 
+  const appRecord = await findAppByUuid(client.app_uuid);
+  if (!appRecord) {
+    return res.status(500).json({
+      error: "server_error",
+      error_description: "Associated app configuration is unavailable.",
+    });
+  }
+
   let subject = sub;
   let emailClaim = normalizedEmail;
 
@@ -2468,7 +2839,10 @@ app.post("/oauth/preview-token", async (req, res) => {
     subject = user.uuid;
     emailClaim = user.email;
   } else if (normalizedEmail) {
-    const existing = await findUserByEmail(normalizedEmail);
+    const existing = await findUserByEmail(normalizedEmail, {
+      appId: appRecord.id,
+      fallbackToAny: false,
+    });
     if (existing) {
       subject = existing.uuid;
       emailClaim = existing.email;
@@ -2477,14 +2851,6 @@ app.post("/oauth/preview-token", async (req, res) => {
 
   if (!subject) {
     subject = "preview-user";
-  }
-
-  const appRecord = await findAppByUuid(client.app_uuid);
-  if (!appRecord) {
-    return res.status(500).json({
-      error: "server_error",
-      error_description: "Associated app configuration is unavailable.",
-    });
   }
 
   const resolvedResource =
@@ -2504,6 +2870,17 @@ app.post("/oauth/preview-token", async (req, res) => {
       scope,
       emailClaim
     );
+    const protectedHeader = decodeProtectedHeader(token);
+    console.info("[preview-token] issued token", {
+      clientId: client.client_id,
+      subject,
+      resource: resolvedResource,
+      scope,
+      hasEmailClaim: Boolean(emailClaim),
+      expiresAt,
+      kid: protectedHeader.kid,
+      alg: protectedHeader.alg,
+    });
     const now = Math.floor(Date.now() / 1000);
     const expiresIn = Math.max(0, expiresAt - now);
     return res.json({

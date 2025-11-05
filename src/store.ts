@@ -12,6 +12,7 @@ type AppRow = {
   name: string;
   config?: string | null;
   status?: string | null;
+  payment_link?: string | null;
   mcp_server_ids?: string[] | string | null;
   app_meta_info?: unknown;
   created_at?: string | null;
@@ -53,6 +54,16 @@ type TokenRow = {
   scope: string;
   resource: string;
   expires_at: number;
+};
+
+type AppUserPaymentRow = {
+  id: string;
+  app_id?: string | null;
+  user_uuid?: string | null;
+  status?: string | null;
+  expires_at?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
 };
 
 type AppConfigClient = {
@@ -118,6 +129,7 @@ export interface App {
   uuid: string;
   name: string;
   resource_uri: string;
+  payment_link?: string | null;
   mcp_server_ids: string[];
   default_scopes: string;
   status?: string | null;
@@ -495,6 +507,7 @@ const appRowToApp = (row?: AppRow | null): App | undefined => {
     uuid: row.id,
     name: row.name,
     resource_uri: resourceUri,
+    payment_link: row.payment_link ?? undefined,
     mcp_server_ids: mcpServerIds,
     default_scopes: canonicalizeScopes(defaultScopes).join(" "),
     status: row.status ?? undefined,
@@ -594,7 +607,9 @@ const parseAppMetaInfo = (value: unknown): AppMetaInfo | undefined => {
 const fetchAllApps = async (): Promise<App[]> => {
   const { data, error } = await supabase
     .from("apps")
-    .select("id,name,config,status,mcp_server_ids,app_meta_info,created_at,updated_at");
+    .select(
+      "id,name,config,status,payment_link,mcp_server_ids,app_meta_info,created_at,updated_at"
+    );
   if (error) {
     throw new Error(`Failed to fetch apps: ${error.message}`);
   }
@@ -633,18 +648,50 @@ const updateAppConfig = async (appId: string, config: AppConfig) => {
 };
 
 export const findUserByEmail = async (
-  email: string
+  email: string,
+  options?: { appId?: string | null; fallbackToAny?: boolean }
 ): Promise<User | undefined> => {
   const normalizedEmail = email.trim().toLowerCase();
+  const fallbackToAny = options?.fallbackToAny ?? true;
+
+  const queryByApp = async (
+    appId: string | null
+  ): Promise<User | undefined> => {
+    let query = supabase
+      .from("app_users")
+      .select("*")
+      .ilike("email", normalizedEmail)
+      .limit(1);
+    if (appId === null) {
+      query = query.is("app_id", null);
+    } else {
+      query = query.eq("app_id", appId);
+    }
+    const { data, error } = await query;
+    if (error) {
+      throw new Error(`Failed to fetch user by email: ${error.message}`);
+    }
+    const record = Array.isArray(data) ? (data[0] as AppUserRow | undefined) : undefined;
+    return userRowToUser(record ?? undefined);
+  };
+
+  if (options && Object.prototype.hasOwnProperty.call(options, "appId")) {
+    const appScoped = await queryByApp(options.appId ?? null);
+    if (appScoped || !fallbackToAny) {
+      return appScoped;
+    }
+  }
+
   const { data, error } = await supabase
     .from("app_users")
     .select("*")
     .ilike("email", normalizedEmail)
-    .maybeSingle();
+    .limit(1);
   if (error) {
     throw new Error(`Failed to fetch user by email: ${error.message}`);
   }
-  return userRowToUser((data as AppUserRow | null) ?? undefined);
+  const record = Array.isArray(data) ? (data[0] as AppUserRow | undefined) : undefined;
+  return userRowToUser(record ?? undefined);
 };
 
 export const findUserByUuid = async (
@@ -715,7 +762,9 @@ export const findAppByResource = async (
 export const findAppByUuid = async (uuid: string): Promise<App | undefined> => {
   const { data, error } = await supabase
     .from("apps")
-    .select("id,name,config,status,mcp_server_ids,app_meta_info,created_at,updated_at")
+    .select(
+      "id,name,config,status,payment_link,mcp_server_ids,app_meta_info,created_at,updated_at"
+    )
     .eq("id", uuid)
     .maybeSingle();
   if (error) {
@@ -726,6 +775,49 @@ export const findAppByUuid = async (uuid: string): Promise<App | undefined> => {
 
 export const listApps = async (): Promise<App[]> => {
   return fetchAllApps();
+};
+
+const ACTIVE_PAYMENT_STATUSES = new Set([
+  "active",
+  "paid",
+  "succeeded",
+  "completed",
+  "trialing",
+  "trial",
+  "valid",
+]);
+
+export const userHasActivePayment = async (
+  appId: string,
+  userUuid: string
+): Promise<boolean> => {
+  const { data, error } = await supabase
+    .from("app_user_payments")
+    .select("id,app_id,user_uuid,status,expires_at,updated_at")
+    .eq("app_id", appId)
+    .eq("user_uuid", userUuid)
+    .order("updated_at", { ascending: false })
+    .limit(10);
+  if (error) {
+    throw new Error(`Failed to check payment status: ${error.message}`);
+  }
+  const now = Date.now();
+  return (data as AppUserPaymentRow[] | null | undefined)?.some((row) => {
+    if (!row) {
+      return false;
+    }
+    const status = (row.status ?? "").trim().toLowerCase();
+    if (status && !ACTIVE_PAYMENT_STATUSES.has(status)) {
+      return false;
+    }
+    if (row.expires_at) {
+      const expires = new Date(row.expires_at);
+      if (!Number.isNaN(expires.getTime()) && expires.getTime() < now) {
+        return false;
+      }
+    }
+    return true;
+  }) ?? false;
 };
 
 export const getAppScopes = (app: App): string[] => {
