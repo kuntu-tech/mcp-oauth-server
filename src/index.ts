@@ -848,7 +848,10 @@ const buildFirebaseUiSnippet = (mode: FirebaseUiMode = "auth"): string => {
           .map((provider) => {
             switch (provider) {
               case "google":
-                return firebase.auth.GoogleAuthProvider.PROVIDER_ID;
+                return {
+                  provider: firebase.auth.GoogleAuthProvider.PROVIDER_ID,
+                  scopes: ["email"],
+                };
               case "apple":
                 return "apple.com";
               case "github":
@@ -907,14 +910,33 @@ const buildFirebaseUiSnippet = (mode: FirebaseUiMode = "auth"): string => {
         };
 
         const processAuthResult = async (authResult) => {
-          const email =
-            authResult?.user?.email || authResult?.user?.uid || "";
-          setStatus("loading", "Firebase " + authModeLabel + " successful: " + email + ", verifying...");
+          const rawUserEmail =
+            typeof authResult?.user?.email === "string" ? authResult.user.email : undefined;
+          const additionalEmail =
+            typeof authResult?.additionalUserInfo?.profile?.email === "string"
+              ? authResult.additionalUserInfo.profile.email
+              : undefined;
+          const pickEmail = (value) => {
+            if (typeof value !== "string") {
+              return undefined;
+            }
+            const trimmed = value.trim();
+            return trimmed.length > 0 ? trimmed : undefined;
+          };
+          const verifiedEmail = pickEmail(rawUserEmail) ?? pickEmail(additionalEmail);
+          const displayEmail = verifiedEmail ?? authResult?.user?.uid ?? "";
+          setStatus(
+            "loading",
+            "Firebase " + authModeLabel + " successful: " + displayEmail + ", verifying..."
+          );
           try {
             const idToken = await authResult.user.getIdToken();
             const requestPayload = { idToken };
             if (resumeAuth) {
               requestPayload.resume = resumeAuth;
+            }
+            if (verifiedEmail) {
+              requestPayload.email = verifiedEmail;
             }
             const response = await fetch("/auth/firebase/session", {
               method: "POST",
@@ -933,7 +955,7 @@ const buildFirebaseUiSnippet = (mode: FirebaseUiMode = "auth"): string => {
               throw new Error(message);
             }
             setStatus("success", "Login successful, redirecting...");
-            renderHeaderAuthEmail(email);
+            renderHeaderAuthEmail(verifiedEmail ?? displayEmail);
             if (payload.redirect) {
               window.location.assign(payload.redirect);
             } else if (authState?.pendingAuth) {
@@ -1013,7 +1035,7 @@ type AppOverviewOptions = {
 
 type FirebaseAccountRecord = {
   uid: string;
-  email: string;
+  email?: string;
   displayName?: string;
 };
 
@@ -1029,6 +1051,56 @@ const decodeJwtPayload = (token: string): Record<string, unknown> | undefined =>
     console.warn("Failed to decode Firebase ID token payload", error);
     return undefined;
   }
+};
+
+const extractEmailFromTokenPayload = (
+  payload: Record<string, unknown> | undefined
+): string | undefined => {
+  if (!payload) {
+    return undefined;
+  }
+  const pickString = (value: unknown): string | undefined => {
+    if (typeof value !== "string") {
+      return undefined;
+    }
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  };
+  const directEmail = pickString(payload.email);
+  if (directEmail) {
+    return directEmail;
+  }
+  const firebaseClaim = payload.firebase;
+  if (
+    firebaseClaim &&
+    typeof firebaseClaim === "object" &&
+    firebaseClaim !== null
+  ) {
+    const identities = (firebaseClaim as Record<string, unknown>).identities;
+    if (identities && typeof identities === "object" && identities !== null) {
+      const identityEntries = identities as Record<string, unknown>;
+      const emailIdentities = identityEntries.email;
+      if (Array.isArray(emailIdentities)) {
+        for (const identity of emailIdentities) {
+          const candidate = pickString(identity);
+          if (candidate) {
+            return candidate;
+          }
+        }
+      }
+      for (const value of Object.values(identityEntries)) {
+        if (Array.isArray(value)) {
+          for (const entry of value) {
+            const candidate = pickString(entry);
+            if (candidate && candidate.includes("@")) {
+              return candidate;
+            }
+          }
+        }
+      }
+    }
+  }
+  return undefined;
 };
 
 const verifyFirebaseIdToken = async (
@@ -1112,14 +1184,36 @@ const verifyFirebaseIdToken = async (
     user?.providerUserInfo?.find(
       (info) => typeof info?.email === "string" && info.email.trim().length > 0
     )?.email ?? undefined;
-  const payloadEmail =
-    typeof tokenPayload?.email === "string" && tokenPayload.email.trim().length > 0
-      ? tokenPayload.email
-      : undefined;
+  const payloadEmail = extractEmailFromTokenPayload(
+    tokenPayload as Record<string, unknown> | undefined
+  );
 
-  const email = (user?.email ?? providerEmail ?? payloadEmail)?.trim();
-  if (!email) {
-    throw new Error("Firebase account missing email information.");
+  const emailCandidate = (user?.email ?? providerEmail ?? payloadEmail)?.trim();
+  if (!emailCandidate) {
+    const providerEmails = Array.isArray(user?.providerUserInfo)
+      ? user?.providerUserInfo.map((info) => info?.email ?? null)
+      : [];
+    const logPayload =
+      tokenPayload && typeof tokenPayload === "object"
+        ? {
+            keys: Object.keys(tokenPayload),
+            firebaseIdentities:
+              typeof (tokenPayload as Record<string, unknown>).firebase === "object" &&
+              (tokenPayload as { firebase?: { identities?: unknown } }).firebase?.identities
+                ? Object.keys(
+                    (tokenPayload as {
+                      firebase?: { identities?: Record<string, unknown> };
+                    }).firebase!.identities ?? {}
+                  )
+                : null,
+            email: payloadEmail ?? null,
+          }
+        : null;
+    console.warn("Firebase account missing email details", {
+      userEmail: user?.email ?? null,
+      providerEmails,
+      logPayload,
+    });
   }
 
   const payloadName =
@@ -1145,7 +1239,7 @@ const verifyFirebaseIdToken = async (
 
   return {
     uid,
-    email,
+    email: emailCandidate ?? undefined,
     displayName,
   };
 };
@@ -2312,6 +2406,7 @@ const authorizePostSchema = authorizationQuerySchema.extend({
 const firebaseSessionRequestSchema = z.object({
   idToken: z.string().min(1, "idToken cannot be empty"),
   resume: authorizationQuerySchema.optional(),
+  email: z.string().email().optional(),
 });
 
 const registrationSchema = z.object({
@@ -2630,9 +2725,31 @@ app.post("/auth/firebase/session", async (req, res) => {
   }
 
   try {
-    const { idToken, resume } = parsed.data;
+    const { idToken, resume, email: providedEmailRaw } = parsed.data;
     const account = await verifyFirebaseIdToken(idToken);
-    const email = account.email.toLowerCase();
+    const providedEmail =
+      typeof providedEmailRaw === "string"
+        ? providedEmailRaw.trim().toLowerCase()
+        : undefined;
+    const accountEmail = typeof account.email === "string" ? account.email.trim().toLowerCase() : undefined;
+    const email = accountEmail ?? providedEmail;
+    if (!email) {
+      console.warn("Firebase login missing email after fallback", {
+        firebaseUid: account.uid,
+        hasAccountEmail: Boolean(accountEmail),
+        hasProvidedEmail: Boolean(providedEmail),
+      });
+      return res.status(400).json({
+        ok: false,
+        error: "Firebase login did not provide an email address.",
+      });
+    }
+    if (!accountEmail && providedEmail) {
+      console.warn("Using provided email for Firebase account without email", {
+        firebaseUid: account.uid,
+        email: providedEmail,
+      });
+    }
 
     if (!req.session.authRequest && resume) {
       try {
