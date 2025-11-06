@@ -985,7 +985,7 @@ const buildFirebaseUiSnippet = (mode: FirebaseUiMode = "auth"): string => {
           const displayEmail = verifiedEmail ?? authResult?.user?.uid ?? "";
           setStatus(
             "loading",
-            "Firebase " + authModeLabel + " successful: " + displayEmail + ", verifying..."
+            authModeLabel + " successful: " + displayEmail + ", verifying..."
           );
           try {
             const idToken = await authResult.user.getIdToken();
@@ -1035,10 +1035,10 @@ const buildFirebaseUiSnippet = (mode: FirebaseUiMode = "auth"): string => {
               setTimeout(() => hideModal(), 800);
             }
           } catch (err) {
-            console.error("Firebase login verification failed", err);
+            console.error("Login verification failed", err);
             setStatus(
               "error",
-              "Firebase login verification failed: " + (err?.message || "Unknown error")
+              "Login verification failed: " + (err?.message || "Unknown error")
             );
           }
         };
@@ -1057,7 +1057,6 @@ const buildFirebaseUiSnippet = (mode: FirebaseUiMode = "auth"): string => {
               console.error("Firebase UI sign-in failure", error);
               setStatus(
                 "error",
-                "Firebase " +
                   authModeLabel +
                   " failed: " +
                   (error?.message ?? "Unknown error")
@@ -1282,7 +1281,7 @@ const verifyFirebaseIdToken = async (
             email: payloadEmail ?? null,
           }
         : null;
-    console.warn("Firebase account missing email details", {
+    console.warn("Login account missing email details", {
       userEmail: user?.email ?? null,
       providerEmails,
       logPayload,
@@ -3245,18 +3244,18 @@ app.post("/auth/firebase/session", async (req, res) => {
     const accountEmail = typeof account.email === "string" ? account.email.trim().toLowerCase() : undefined;
     const email = accountEmail ?? providedEmail;
     if (!email) {
-      console.warn("Firebase login missing email after fallback", {
+      console.warn("Login account missing email after fallback", {
         firebaseUid: account.uid,
         hasAccountEmail: Boolean(accountEmail),
         hasProvidedEmail: Boolean(providedEmail),
       });
       return res.status(400).json({
         ok: false,
-        error: "Firebase login did not provide an email address.",
+        error: "Login account did not provide an email address.",
       });
     }
     if (!accountEmail && providedEmail) {
-      console.warn("Using provided email for Firebase account without email", {
+      console.warn("Using provided email for login account without email", {
         firebaseUid: account.uid,
         email: providedEmail,
       });
@@ -3267,7 +3266,7 @@ app.post("/auth/firebase/session", async (req, res) => {
         const { authRequest } = await prepareAuthorizationDetails(resume);
         req.session.authRequest = authRequest;
       } catch (error) {
-        console.warn("Failed to resume authorization request from Firebase payload", error);
+        console.warn("Failed to resume authorization request from login payload", error);
       }
     }
 
@@ -3351,7 +3350,7 @@ app.post("/auth/firebase/session", async (req, res) => {
       error:
         error instanceof Error
           ? error.message
-          : "Firebase login verification failed, please try again later.",
+          : "Login verification failed, please try again later.",
     });
   }
 });
