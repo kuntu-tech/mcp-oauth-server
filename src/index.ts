@@ -585,7 +585,6 @@ const createPaymentSession = async (
     },
     body: JSON.stringify({
       app_userid: userUuid,
-      app_id: app.id,
       successUrl: "no-redirect",
       cancelUrl: "no-redirect"
     }),
@@ -1723,7 +1722,7 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
           id="payment-modal-backdrop"
           class="absolute inset-0 payment-modal-backdrop"
         ></div>
-        <div class="relative w-full max-w-2xl mx-auto">
+        <div class="relative w-full mx-auto" style="max-width: 26rem;">
           <div class="payment-modal-card">
             <button
               id="payment-modal-close"
@@ -1749,9 +1748,6 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
                   <span id="payment-modal-price" class="payment-modal-price-value">$29</span>
                   <span id="payment-modal-interval" class="payment-modal-price-interval">/month</span>
                 </div>
-                <p id="payment-modal-price-note" class="payment-modal-price-note">
-                  Monthly subscription, cancel anytime
-                </p>
               </div>
               <ul class="payment-modal-features">
                 <li class="payment-modal-feature">
@@ -1777,7 +1773,7 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
                 <span>Go to payment</span>
                 ${iconArrowRight("w-5 h-5")}
               </a>
-              <p id="payment-modal-status" class="payment-modal-status"></p>
+              <!--<p id="payment-modal-status" class="payment-modal-status"></p>-->
             </div>
           </div>
         </div>
@@ -1956,7 +1952,6 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
         const summaryEl = document.getElementById("payment-modal-summary");
         const priceEl = document.getElementById("payment-modal-price");
         const intervalEl = document.getElementById("payment-modal-interval");
-        const priceNoteEl = document.getElementById("payment-modal-price-note");
         const ctaEl = document.getElementById("payment-modal-cta");
         const statusEl = document.getElementById("payment-modal-status");
         const defaultSummary = "Unlock all advanced features";
@@ -2097,7 +2092,7 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
                 " Started " + parsed.toLocaleString(undefined, { hour12: false }) + ".";
             }
           }
-          setStatus("Waiting for payment confirmation…" + startedLabel, "info");
+          setStatus("Waiting for payment confirmation…", "info");
           stopPolling();
           poll();
         };
@@ -2433,7 +2428,6 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
         content: "";
         position: absolute;
         inset: 0;
-        height: 160px;
         background: linear-gradient(135deg, rgba(99, 102, 241, 0.14), rgba(56, 189, 248, 0.12));
         pointer-events: none;
       }
@@ -2504,11 +2498,6 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
       .payment-modal-price-interval {
         font-size: 1.05rem;
         color: #475569;
-      }
-      .payment-modal-price-note {
-        margin-top: 8px;
-        font-size: 0.95rem;
-        color: #64748b;
       }
       .payment-modal-features {
         list-style: none;
