@@ -2424,7 +2424,6 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
         content: "";
         position: absolute;
         inset: 0;
-        background: linear-gradient(135deg, rgba(99, 102, 241, 0.14), rgba(56, 189, 248, 0.12));
         pointer-events: none;
       }
       .payment-modal-close {
