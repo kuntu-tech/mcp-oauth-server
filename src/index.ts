@@ -1725,7 +1725,6 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
         ></div>
         <div class="relative w-full max-w-2xl mx-auto">
           <div class="payment-modal-card">
-            <span class="payment-modal-badge">Recommended</span>
             <button
               id="payment-modal-close"
               class="payment-modal-close"
@@ -2423,42 +2422,28 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
       }
       .payment-modal-card {
         position: relative;
-        background: linear-gradient(160deg, #0f172a, #1e293b);
+        background: #ffffff;
         border-radius: 24px;
-        border: 2px solid rgba(51, 65, 85, 0.65);
-        box-shadow: 0 32px 60px rgba(15, 23, 42, 0.55);
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        box-shadow: 0 28px 60px rgba(15, 23, 42, 0.18);
         overflow: hidden;
-        color: #f8fafc;
+        color: #0f172a;
       }
       .payment-modal-card::before {
         content: "";
         position: absolute;
-        inset: -30% 0 auto 0;
-        height: 180px;
-        background: radial-gradient(120% 120% at 50% 0%, rgba(79, 70, 229, 0.35), rgba(14, 116, 144, 0.12) 60%, transparent);
-        opacity: 0.8;
+        inset: 0;
+        height: 160px;
+        background: linear-gradient(135deg, rgba(99, 102, 241, 0.14), rgba(56, 189, 248, 0.12));
         pointer-events: none;
-      }
-      .payment-modal-badge {
-        position: absolute;
-        top: 0;
-        right: 0;
-        padding: 6px 16px;
-        background: #ffffff;
-        color: #0f172a;
-        font-weight: 600;
-        font-size: 0.8rem;
-        border-bottom-left-radius: 12px;
-        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.2);
-        z-index: 2;
       }
       .payment-modal-close {
         position: absolute;
         top: 18px;
         right: 18px;
         border: none;
-        background: rgba(15, 23, 42, 0.45);
-        color: rgba(226, 232, 240, 0.85);
+        background: rgba(148, 163, 184, 0.22);
+        color: #0f172a;
         border-radius: 999px;
         padding: 8px;
         cursor: pointer;
@@ -2466,14 +2451,14 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
         z-index: 3;
       }
       .payment-modal-close:hover {
-        background: rgba(148, 163, 184, 0.25);
-        color: #ffffff;
+        background: rgba(99, 102, 241, 0.15);
+        color: #1d4ed8;
       }
       .payment-modal-card-header {
         position: relative;
         padding: 32px;
         padding-bottom: 24px;
-        border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+        border-bottom: 1px solid rgba(226, 232, 240, 0.9);
         display: flex;
         align-items: center;
         gap: 18px;
@@ -2483,7 +2468,7 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
         width: 52px;
         height: 52px;
         border-radius: 18px;
-        background: rgba(148, 163, 184, 0.18);
+        background: rgba(59, 130, 246, 0.12);
         align-items: center;
         justify-content: center;
       }
@@ -2494,7 +2479,7 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
       }
       .payment-modal-subtitle {
         margin-top: 6px;
-        color: rgba(226, 232, 240, 0.82);
+        color: #475569;
         font-size: 0.95rem;
       }
       .payment-modal-body {
@@ -2518,12 +2503,12 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
       }
       .payment-modal-price-interval {
         font-size: 1.05rem;
-        color: rgba(226, 232, 240, 0.75);
+        color: #475569;
       }
       .payment-modal-price-note {
         margin-top: 8px;
         font-size: 0.95rem;
-        color: rgba(226, 232, 240, 0.8);
+        color: #64748b;
       }
       .payment-modal-features {
         list-style: none;
@@ -2538,13 +2523,13 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
         align-items: flex-start;
         gap: 10px;
         font-size: 0.95rem;
-        color: rgba(248, 250, 252, 0.9);
+        color: #334155;
       }
       .payment-modal-feature-icon {
         flex-shrink: 0;
         width: 20px;
         height: 20px;
-        color: #ffffff;
+        color: #2563eb;
       }
       .payment-modal-cta {
         display: inline-flex;
@@ -2553,30 +2538,30 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
         gap: 10px;
         width: 100%;
         border-radius: 14px;
-        background: #f8fafc;
-        color: #0f172a;
+        background: linear-gradient(135deg, #2563eb, #4338ca);
+        color: #ffffff;
         font-weight: 600;
         font-size: 1.05rem;
         padding: 16px;
         text-decoration: none;
         transition: transform 0.2s ease, box-shadow 0.2s ease;
-        box-shadow: 0 20px 36px rgba(248, 250, 252, 0.2);
+        box-shadow: 0 20px 36px rgba(37, 99, 235, 0.28);
       }
       .payment-modal-cta:hover {
         transform: translateY(-1px);
-        box-shadow: 0 24px 44px rgba(248, 250, 252, 0.24);
+        box-shadow: 0 24px 44px rgba(30, 64, 175, 0.32);
       }
       .payment-modal-status {
         min-height: 1.5rem;
         font-size: 0.9rem;
         text-align: center;
-        color: rgba(226, 232, 240, 0.82);
+        color: #475569;
       }
       .payment-modal-status.error {
-        color: #fca5a5;
+        color: #dc2626;
       }
       .payment-modal-status.success {
-        color: #86efac;
+        color: #15803d;
       }
       @media (max-width: 640px) {
         .payment-modal-card-header {
