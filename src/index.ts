@@ -499,10 +499,27 @@ const resolveSessionAppId = async (
   return undefined;
 };
 
+type PaymentRequirement = {
+  appName: string;
+  paymentLink: string;
+  startedAt?: string;
+  priceLabel?: string;
+};
+
 type PaymentGateDecision =
   | { allowed: true }
-  | { allowed: false; redirectPath: string }
+  | { allowed: false; payment: PaymentRequirement }
   | { allowed: false; error: string };
+
+type SessionPendingPayment = {
+  appId: string;
+  paymentLink: string;
+  appName?: string;
+  startedAt?: string;
+  sessionId?: string;
+  userUuid?: string;
+  paymentModel?: AppPaymentModel;
+};
 
 type PaymentSessionApiResponse = {
   success?: boolean;
@@ -540,6 +557,20 @@ const formatPriceLabel = (model?: AppPaymentModel): string | undefined => {
   return undefined;
 };
 
+const buildPaymentRequirement = (
+  pending: SessionPendingPayment,
+  appRecord?: App
+): PaymentRequirement => {
+  return {
+    appName: pending.appName ?? appRecord?.name ?? "this app",
+    paymentLink: pending.paymentLink,
+    startedAt: pending.startedAt,
+    priceLabel: formatPriceLabel(
+      pending.paymentModel ?? appRecord?.payment_model
+    ),
+  };
+};
+
 const createPaymentSession = async (
   userUuid: string,
   app: App
@@ -555,6 +586,8 @@ const createPaymentSession = async (
     body: JSON.stringify({
       app_userid: userUuid,
       app_id: app.id,
+      successUrl: "no-redirect",
+      cancelUrl: "no-redirect"
     }),
   });
   if (!response.ok) {
@@ -622,7 +655,8 @@ const ensurePaymentAccess = async (
   };
 
   const paymentModel = appRecord.payment_model;
-  const existingPending = req.session.pendingPayment;
+  const existingPending = req.session
+    .pendingPayment as SessionPendingPayment | undefined;
   const hasPendingForUser =
     existingPending &&
     existingPending.appId === appRecord.id &&
@@ -649,7 +683,10 @@ const ensurePaymentAccess = async (
     }
 
     if (hasPendingForUser && existingPending?.paymentLink) {
-      return { allowed: false, redirectPath: "/auth/payment-required" };
+      return {
+        allowed: false,
+        payment: buildPaymentRequirement(existingPending, appRecord),
+      };
     }
 
     try {
@@ -672,7 +709,18 @@ const ensurePaymentAccess = async (
       };
     }
 
-    return { allowed: false, redirectPath: "/auth/payment-required" };
+    const pendingPayment = req.session
+      .pendingPayment as SessionPendingPayment | undefined;
+    if (pendingPayment?.paymentLink) {
+      return {
+        allowed: false,
+        payment: buildPaymentRequirement(pendingPayment, appRecord),
+      };
+    }
+    return {
+      allowed: false,
+      error: "Unable to initiate payment session. Please try again later.",
+    };
   }
 
   const paymentLink = appRecord.payment_link?.trim();
@@ -709,7 +757,18 @@ const ensurePaymentAccess = async (
     console.warn("Failed to persist session after setting pending payment", error);
   }
 
-  return { allowed: false, redirectPath: "/auth/payment-required" };
+  const pendingPayment = req.session
+    .pendingPayment as SessionPendingPayment | undefined;
+  if (pendingPayment?.paymentLink) {
+    return {
+      allowed: false,
+      payment: buildPaymentRequirement(pendingPayment, appRecord),
+    };
+  }
+  return {
+    allowed: false,
+    error: "Unable to initiate payment session. Please try again later.",
+  };
 };
 
 const FIREBASE_VERSION = "12.4.0";
@@ -954,8 +1013,21 @@ const buildFirebaseUiSnippet = (mode: FirebaseUiMode = "auth"): string => {
                 "Server failed to complete login verification.";
               throw new Error(message);
             }
-            setStatus("success", "Login successful, redirecting...");
             renderHeaderAuthEmail(verifiedEmail ?? displayEmail);
+            if (payload.paymentRequired) {
+              setStatus(
+                "success",
+                "Login successful. Complete payment to continue."
+              );
+              if (typeof window.__showPaymentModal === "function") {
+                window.__showPaymentModal(payload.paymentRequired);
+              } else {
+                window.location.assign("/");
+              }
+              setTimeout(() => hideModal(), 600);
+              return;
+            }
+            setStatus("success", "Login successful, redirecting...");
             if (payload.redirect) {
               window.location.assign(payload.redirect);
             } else if (authState?.pendingAuth) {
@@ -1031,6 +1103,8 @@ type AppOverviewOptions = {
   autoOpenFirebase?: boolean;
   currentUserEmail?: string;
   authResume?: AuthResumePayload;
+  pendingPayment?: PaymentRequirement;
+  autoOpenPayment?: boolean;
 };
 
 type FirebaseAccountRecord = {
@@ -1385,10 +1459,13 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
     pendingAuth,
     autoOpenFirebase,
     currentUserEmail,
+    pendingPayment,
+    autoOpenPayment,
   } = options;
   const hasFirebase = Boolean(CONFIG.firebaseClientConfig?.apiKey);
   const shouldAutoOpenFirebase =
     hasFirebase && !currentUserEmail && Boolean(autoOpenFirebase);
+  const shouldAutoOpenPayment = Boolean(autoOpenPayment && pendingPayment);
   const docsUrl =
     CONFIG.docsUrl && CONFIG.docsUrl.trim().length > 0
       ? CONFIG.docsUrl
@@ -1636,6 +1713,78 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
     `
     : "";
 
+  const paymentModal = `
+      <div
+        id="payment-required-modal"
+        class="fixed inset-0 z-50 hidden items-center justify-center px-4"
+        aria-hidden="true"
+      >
+        <div
+          id="payment-modal-backdrop"
+          class="absolute inset-0 payment-modal-backdrop"
+        ></div>
+        <div class="relative w-full max-w-2xl mx-auto">
+          <div class="payment-modal-card">
+            <span class="payment-modal-badge">Recommended</span>
+            <button
+              id="payment-modal-close"
+              class="payment-modal-close"
+              aria-label="Close payment window"
+            >
+              ${iconX("w-4 h-4")}
+            </button>
+            <div class="payment-modal-card-header">
+              <span class="payment-modal-icon">
+                ${iconCrown("w-6 h-6")}
+              </span>
+              <div>
+                <h3 id="payment-modal-plan" class="payment-modal-title">Pro Plan</h3>
+                <p id="payment-modal-summary" class="payment-modal-subtitle">
+                  Unlock all advanced features
+                </p>
+              </div>
+            </div>
+            <div class="payment-modal-body">
+              <div class="payment-modal-price-wrap">
+                <div class="payment-modal-price">
+                  <span id="payment-modal-price" class="payment-modal-price-value">$29</span>
+                  <span id="payment-modal-interval" class="payment-modal-price-interval">/month</span>
+                </div>
+                <p id="payment-modal-price-note" class="payment-modal-price-note">
+                  Monthly subscription, cancel anytime
+                </p>
+              </div>
+              <ul class="payment-modal-features">
+                <li class="payment-modal-feature">
+                  ${iconCheck("payment-modal-feature-icon")}
+                  <span>Unlimited conversation history</span>
+                </li>
+                <li class="payment-modal-feature">
+                  ${iconCheck("payment-modal-feature-icon")}
+                  <span>Real-time database updates</span>
+                </li>
+                <li class="payment-modal-feature">
+                  ${iconCheck("payment-modal-feature-icon")}
+                  <span>Exclusive professional resources</span>
+                </li>
+              </ul>
+              <a
+                id="payment-modal-cta"
+                class="payment-modal-cta"
+                href="#"
+                target="_blank"
+                rel="noopener"
+              >
+                <span>Go to payment</span>
+                ${iconArrowRight("w-5 h-5")}
+              </a>
+              <p id="payment-modal-status" class="payment-modal-status"></p>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
   const heroSection = `
     <section class="hero-section relative overflow-hidden min-h-screen flex items-center justify-center py-24 md:py-28">
       <div class="absolute inset-0 overflow-hidden">
@@ -1775,20 +1924,214 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
     </footer>
   `;
 
-  const authStateScript = hasFirebase
-    ? `<script>window.__authState = ${serializeForScript({
-        pendingAuth: pendingAuth
-          ? {
-              clientName: pendingAuth.clientName,
-              redirectUri: pendingAuth.redirectUri,
-              scopes: pendingAuth.scopes,
+  const authStateScript = `<script>window.__authState = ${serializeForScript({
+    pendingAuth: pendingAuth
+      ? {
+          clientName: pendingAuth.clientName,
+          redirectUri: pendingAuth.redirectUri,
+          scopes: pendingAuth.scopes,
+        }
+      : null,
+    autoOpenFirebase: shouldAutoOpenFirebase,
+    currentUserEmail: currentUserEmail ?? null,
+    resumeAuth: options.authResume ?? null,
+    pendingPayment: pendingPayment ?? null,
+    autoOpenPayment: shouldAutoOpenPayment,
+  })};</script>`;
+
+  const paymentModalScript = `
+    <script>
+      (function () {
+        const STATUS_ENDPOINT = "/auth/payment-status";
+        const RESUME_URL = "/auth/payment-resume";
+        const state = window.__authState || {};
+        const modal = document.getElementById("payment-required-modal");
+        if (!modal) {
+          window.__showPaymentModal = function () {};
+          window.__hidePaymentModal = function () {};
+          return;
+        }
+        const backdrop = document.getElementById("payment-modal-backdrop");
+        const closeButton = document.getElementById("payment-modal-close");
+        const planEl = document.getElementById("payment-modal-plan");
+        const summaryEl = document.getElementById("payment-modal-summary");
+        const priceEl = document.getElementById("payment-modal-price");
+        const intervalEl = document.getElementById("payment-modal-interval");
+        const priceNoteEl = document.getElementById("payment-modal-price-note");
+        const ctaEl = document.getElementById("payment-modal-cta");
+        const statusEl = document.getElementById("payment-modal-status");
+        const defaultSummary = "Unlock all advanced features";
+        const defaultNote = "Monthly subscription, cancel anytime";
+        let pollTimer = 0;
+        let active = false;
+
+        const setStatus = (message, tone) => {
+          if (!statusEl) return;
+          const base = "payment-modal-status";
+          statusEl.className = base;
+          if (tone === "error") {
+            statusEl.classList.add("error");
+          } else if (tone === "success") {
+            statusEl.classList.add("success");
+          }
+          statusEl.textContent = message || "";
+        };
+
+        const stopPolling = () => {
+          if (pollTimer) {
+            clearTimeout(pollTimer);
+            pollTimer = 0;
+          }
+        };
+
+        const schedulePoll = () => {
+          stopPolling();
+          pollTimer = window.setTimeout(poll, 5000);
+        };
+
+        const poll = async () => {
+          if (!active) {
+            return;
+          }
+          try {
+            const response = await fetch(STATUS_ENDPOINT, {
+              credentials: "same-origin",
+              headers: { "Cache-Control": "no-cache" }
+            });
+            if (!response.ok) {
+              throw new Error("Failed to check payment status.");
             }
-          : null,
-        autoOpenFirebase: shouldAutoOpenFirebase,
-        currentUserEmail: currentUserEmail ?? null,
-        resumeAuth: options.authResume ?? null,
-      })};</script>`
-    : "";
+            const payload = await response.json();
+            if (payload?.paid) {
+              setStatus("Payment confirmed. Continuing…", "success");
+              stopPolling();
+              setTimeout(() => {
+                window.location.assign(RESUME_URL);
+              }, 900);
+              return;
+            }
+            if (payload?.pending) {
+              schedulePoll();
+              return;
+            }
+          } catch (error) {
+            console.warn("Payment status check failed", error);
+            setStatus("Unable to verify payment yet. We'll keep checking…", "error");
+            schedulePoll();
+            return;
+          }
+          schedulePoll();
+        };
+
+        const parsePriceLabel = (label) => {
+          if (typeof label !== "string") {
+            return null;
+          }
+          const trimmed = label.trim();
+          if (!trimmed) {
+            return null;
+          }
+          const parts = trimmed.split("/");
+          if (parts.length >= 2) {
+            const amount = parts.shift();
+            const interval = "/" + parts.join("/").trim();
+            return [amount?.trim() || trimmed, interval];
+          }
+          return [trimmed, ""];
+        };
+
+        const applyPaymentData = (payment) => {
+          const appName = (payment?.appName || "Pro Plan").trim();
+          if (planEl) {
+            planEl.textContent = appName ? appName + " Pro" : "Pro Plan";
+          }
+          if (summaryEl) {
+            const summary = appName
+              ? "Complete your subscription to continue using " + appName + "."
+              : defaultSummary;
+            summaryEl.textContent = summary;
+          }
+          const priceInfo = parsePriceLabel(payment?.priceLabel);
+          if (priceEl) {
+            priceEl.textContent = priceInfo ? priceInfo[0] : payment?.priceLabel || "Subscription";
+          }
+          if (intervalEl) {
+            intervalEl.textContent = priceInfo ? priceInfo[1] : "";
+          }
+          if (priceNoteEl) {
+            priceNoteEl.textContent =
+              payment?.priceLabel ? "Billed as shown. Cancel anytime." : defaultNote;
+          }
+          if (ctaEl) {
+            ctaEl.href = payment?.paymentLink || "#";
+          }
+        };
+
+        const hideModal = () => {
+          modal.classList.add("hidden");
+          modal.classList.remove("flex");
+          active = false;
+          stopPolling();
+          setStatus("");
+          if (typeof window.__authState === "object" && window.__authState) {
+            window.__authState.autoOpenPayment = false;
+          }
+        };
+
+        const showModal = (payment) => {
+          if (!payment) {
+            return;
+          }
+          applyPaymentData(payment);
+          if (typeof window.__authState === "object" && window.__authState) {
+            window.__authState.pendingPayment = payment;
+            window.__authState.autoOpenPayment = false;
+          }
+          modal.classList.remove("hidden");
+          modal.classList.add("flex");
+          active = true;
+          let startedLabel = "";
+          if (payment.startedAt) {
+            const parsed = new Date(payment.startedAt);
+            if (!Number.isNaN(parsed.getTime())) {
+              startedLabel =
+                " Started " + parsed.toLocaleString(undefined, { hour12: false }) + ".";
+            }
+          }
+          setStatus("Waiting for payment confirmation…" + startedLabel, "info");
+          stopPolling();
+          poll();
+        };
+
+        if (closeButton) {
+          closeButton.addEventListener("click", (event) => {
+            event.preventDefault();
+            hideModal();
+          });
+        }
+        if (backdrop) {
+          backdrop.addEventListener("click", (event) => {
+            event.preventDefault();
+            hideModal();
+          });
+        }
+        if (ctaEl) {
+          ctaEl.addEventListener("click", () => {
+            setStatus("Waiting for payment confirmation…", "info");
+          });
+        }
+
+        window.__showPaymentModal = (payment) => {
+          showModal(payment);
+        };
+        window.__hidePaymentModal = hideModal;
+
+        if (state.pendingPayment && state.autoOpenPayment) {
+          showModal(state.pendingPayment);
+        }
+      })();
+    </script>
+  `;
 
   const firebaseSnippet = hasFirebase ? buildFirebaseUiSnippet("auth") : "";
 
@@ -2070,6 +2413,185 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
         .chat-entry { max-width: 100%; }
         .chat-bubble { font-size: 0.92rem; padding: 16px 18px; }
       }
+      .hidden { display: none !important; }
+      #firebase-auth-modal.flex,
+      #payment-required-modal.flex { display: flex; }
+      #payment-required-modal { align-items: center; justify-content: center; }
+      #payment-required-modal .payment-modal-backdrop {
+        background: rgba(15, 23, 42, 0.78);
+        backdrop-filter: blur(14px);
+      }
+      .payment-modal-card {
+        position: relative;
+        background: linear-gradient(160deg, #0f172a, #1e293b);
+        border-radius: 24px;
+        border: 2px solid rgba(51, 65, 85, 0.65);
+        box-shadow: 0 32px 60px rgba(15, 23, 42, 0.55);
+        overflow: hidden;
+        color: #f8fafc;
+      }
+      .payment-modal-card::before {
+        content: "";
+        position: absolute;
+        inset: -30% 0 auto 0;
+        height: 180px;
+        background: radial-gradient(120% 120% at 50% 0%, rgba(79, 70, 229, 0.35), rgba(14, 116, 144, 0.12) 60%, transparent);
+        opacity: 0.8;
+        pointer-events: none;
+      }
+      .payment-modal-badge {
+        position: absolute;
+        top: 0;
+        right: 0;
+        padding: 6px 16px;
+        background: #ffffff;
+        color: #0f172a;
+        font-weight: 600;
+        font-size: 0.8rem;
+        border-bottom-left-radius: 12px;
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.2);
+        z-index: 2;
+      }
+      .payment-modal-close {
+        position: absolute;
+        top: 18px;
+        right: 18px;
+        border: none;
+        background: rgba(15, 23, 42, 0.45);
+        color: rgba(226, 232, 240, 0.85);
+        border-radius: 999px;
+        padding: 8px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        z-index: 3;
+      }
+      .payment-modal-close:hover {
+        background: rgba(148, 163, 184, 0.25);
+        color: #ffffff;
+      }
+      .payment-modal-card-header {
+        position: relative;
+        padding: 32px;
+        padding-bottom: 24px;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+        display: flex;
+        align-items: center;
+        gap: 18px;
+      }
+      .payment-modal-icon {
+        display: inline-flex;
+        width: 52px;
+        height: 52px;
+        border-radius: 18px;
+        background: rgba(148, 163, 184, 0.18);
+        align-items: center;
+        justify-content: center;
+      }
+      .payment-modal-title {
+        font-size: 1.6rem;
+        font-weight: 700;
+        margin: 0;
+      }
+      .payment-modal-subtitle {
+        margin-top: 6px;
+        color: rgba(226, 232, 240, 0.82);
+        font-size: 0.95rem;
+      }
+      .payment-modal-body {
+        padding: 32px;
+        display: flex;
+        flex-direction: column;
+        gap: 28px;
+      }
+      .payment-modal-price-wrap {
+        text-align: center;
+      }
+      .payment-modal-price {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 8px;
+      }
+      .payment-modal-price-value {
+        font-size: clamp(2.75rem, 6vw, 3.6rem);
+        font-weight: 800;
+        line-height: 1;
+      }
+      .payment-modal-price-interval {
+        font-size: 1.05rem;
+        color: rgba(226, 232, 240, 0.75);
+      }
+      .payment-modal-price-note {
+        margin-top: 8px;
+        font-size: 0.95rem;
+        color: rgba(226, 232, 240, 0.8);
+      }
+      .payment-modal-features {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: 14px 18px;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      }
+      .payment-modal-feature {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        font-size: 0.95rem;
+        color: rgba(248, 250, 252, 0.9);
+      }
+      .payment-modal-feature-icon {
+        flex-shrink: 0;
+        width: 20px;
+        height: 20px;
+        color: #ffffff;
+      }
+      .payment-modal-cta {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        width: 100%;
+        border-radius: 14px;
+        background: #f8fafc;
+        color: #0f172a;
+        font-weight: 600;
+        font-size: 1.05rem;
+        padding: 16px;
+        text-decoration: none;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+        box-shadow: 0 20px 36px rgba(248, 250, 252, 0.2);
+      }
+      .payment-modal-cta:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 24px 44px rgba(248, 250, 252, 0.24);
+      }
+      .payment-modal-status {
+        min-height: 1.5rem;
+        font-size: 0.9rem;
+        text-align: center;
+        color: rgba(226, 232, 240, 0.82);
+      }
+      .payment-modal-status.error {
+        color: #fca5a5;
+      }
+      .payment-modal-status.success {
+        color: #86efac;
+      }
+      @media (max-width: 640px) {
+        .payment-modal-card-header {
+          padding: 28px 24px;
+        }
+        .payment-modal-body {
+          padding: 24px;
+        }
+        .payment-modal-price-value {
+          font-size: 2.4rem;
+        }
+        .payment-modal-features {
+          grid-template-columns: 1fr;
+        }
+      }
       @media (prefers-reduced-motion: reduce) {
         [data-animate] { opacity: 1 !important; transform: none !important; }
         [data-tilt] { transform: none !important; }
@@ -2107,7 +2629,9 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
     </main>
     ${footerSection}
     ${firebaseModal}
+    ${paymentModal}
     ${authStateScript}
+    ${paymentModalScript}
     ${firebaseSnippet}
     ${animationScript}
   </body>
@@ -2372,7 +2896,15 @@ const issueCodeAndRedirect = async (
           )
         );
     } else {
-      res.redirect(paymentDecision.redirectPath);
+      await persistSession(req);
+      const authRequest = req.session.authRequest as
+        | PendingAuthRequest
+        | undefined;
+      const redirectTarget =
+        authRequest?.client_id && authRequest.client_id.length > 0
+          ? `/?client_id=${encodeURIComponent(authRequest.client_id)}`
+          : "/";
+      res.redirect(redirectTarget);
     }
     return;
   }
@@ -2592,6 +3124,16 @@ app.get("/", async (req, res) => {
     overviewOptions.currentUserEmail = currentUserEmail;
   }
 
+  const sessionPendingPayment = req.session
+    .pendingPayment as SessionPendingPayment | undefined;
+  if (sessionPendingPayment?.paymentLink) {
+    overviewOptions.pendingPayment = buildPaymentRequirement(
+      sessionPendingPayment,
+      overviewOptions.app
+    );
+    overviewOptions.autoOpenPayment = true;
+  }
+
   const landingPage = renderLandingPage(overviewOptions);
   res.send(landingPage);
 });
@@ -2801,7 +3343,7 @@ app.post("/auth/firebase/session", async (req, res) => {
         }
         return res.json({
           ok: true,
-          redirect: paymentDecision.redirectPath,
+          paymentRequired: paymentDecision.payment,
         });
       }
       try {
