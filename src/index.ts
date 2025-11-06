@@ -1773,7 +1773,7 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
                 <span>Go to payment</span>
                 ${iconArrowRight("w-5 h-5")}
               </a>
-              <!--<p id="payment-modal-status" class="payment-modal-status"></p>-->
+              <!--<p id="payment-modal-status" class="payment-modal-status"></p>--> 
             </div>
           </div>
         </div>
@@ -2051,10 +2051,6 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
           }
           if (intervalEl) {
             intervalEl.textContent = priceInfo ? priceInfo[1] : "";
-          }
-          if (priceNoteEl) {
-            priceNoteEl.textContent =
-              payment?.priceLabel ? "Billed as shown. Cancel anytime." : defaultNote;
           }
           if (ctaEl) {
             ctaEl.href = payment?.paymentLink || "#";
