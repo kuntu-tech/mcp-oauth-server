@@ -1796,14 +1796,16 @@ app.get("/", async (req, res) => {
     typeof clientIdParam === "string" && clientIdParam.trim().length > 0
       ? clientIdParam.trim()
       : undefined;
-  const mcpUrlParam = req.query.mcpUrl;
-  const mcpUrl =
-    typeof mcpUrlParam === "string" && mcpUrlParam.trim().length > 0
-      ? mcpUrlParam.trim()
+  const mcpUrlParam =
+    typeof req.query.mcpUrl === "string" && req.query.mcpUrl.trim().length > 0
+      ? req.query.mcpUrl.trim()
+      : typeof req.query.mcp === "string" && req.query.mcp.trim().length > 0
+      ? req.query.mcp.trim()
       : undefined;
+  const mcpUrl = mcpUrlParam;
 
   const authRequest = req.session.authRequest;
-  if (!clientId && authRequest) {
+  if (!clientId && authRequest && !mcpUrl) {
     clientId = authRequest.client_id;
   }
 
