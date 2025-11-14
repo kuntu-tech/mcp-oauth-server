@@ -985,7 +985,7 @@ const renderLandingPage = (options: AppOverviewOptions): string => {
               ${iconArrowRight("w-5 h-5")}
             </a>
             ${
-              hasFirebase
+              hasFirebase && !mcpUrl
                 ? `<button type="button" data-open-firebase class="inline-flex items-center gap-2 rounded-full px-7 py-3 border border-slate-300/70 bg-white/80 text-slate-800 font-semibold shadow-sm hover:border-slate-400 transition">
                   <span>Sign in to Continue</span>
                 </button>`
@@ -1832,7 +1832,8 @@ app.get("/", async (req, res) => {
   }
 
   let pendingAuthSummary: AppOverviewOptions["pendingAuth"];
-  let shouldAutoOpenFirebase = !currentUserEmail;
+  // 当有 mcpUrl 参数时，不自动打开登录框
+  let shouldAutoOpenFirebase = !currentUserEmail && !mcpUrl;
   let authResumePayload: AuthResumePayload | undefined;
 
   if (clientId) {
@@ -1891,7 +1892,10 @@ app.get("/", async (req, res) => {
   }
 
   if (authRequest) {
-    shouldAutoOpenFirebase = true;
+    // 当有 mcpUrl 参数时，即使有 authRequest 也不自动打开登录框
+    if (!mcpUrl) {
+      shouldAutoOpenFirebase = true;
+    }
     const clientName =
       overviewOptions.client?.client_name ??
       overviewOptions.client?.client_id ??

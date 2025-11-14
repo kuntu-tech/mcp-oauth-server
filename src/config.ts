@@ -63,7 +63,7 @@ export const CONFIG = {
   adminContact: process.env.ADMIN_CONTACT ?? "mailto:admin@example.com",
   docsUrl:
     process.env.DOCUMENTATION_URL ??
-    "https://developers.openai.com/apps-sdk/build/auth",
+    "https://chatgpt.com",
   privacyPolicyUrl:
     process.env.PRIVACY_POLICY_URL ??
     "https://developers.openai.com/apps-sdk/data-usage#privacy",
